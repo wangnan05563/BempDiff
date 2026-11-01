@@ -6,12 +6,13 @@
 // 仅作为原生窗口宿主 + 进程管理器，不打包任何业务代码。
 // 生产打包由 electron-builder 复用同一 main.js，区别仅在于资源根路径（resourcesPath）。
 
-const { app, BrowserWindow, ipcMain, dialog, screen, shell } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, screen, shell, Menu, Tray, nativeImage } = require('electron')
 const path = require('node:path')
 const fs = require('node:fs')
 const net = require('node:net')
 const { spawn, spawnSync } = require('node:child_process')
 const http = require('node:http')
+const closeBehaviorStore = require('./close-behavior')
 
 // ---------- 配置 ----------
 const PORT = 18765
@@ -31,6 +32,11 @@ const LOGO = path.join(__dirname, '..', 'bempdiff-logo.png')
 
 let children = [] // sidecar 子进程，退出时回收
 let backendPid = null // Java 后端主进程 PID（记录用于退出时 taskkill /T 树杀）
+let mainWindow = null // 主窗口句柄（托盘恢复 / 外部文件参数投递都指向它）
+let pendingShellPaths = null
+let tray = null // 托盘常驻对象（首次「最小化到托盘」时懒创建）
+let isQuitting = false // 应用真正退出中：close 事件直接放行，不再弹关闭对话框
+let closeDialogOpen = false // 关闭对话框已打开：拦截连点关闭造成的重入
 
 // ---------- 资源根路径 ----------
 // 开发态：bempdiff/dev-shell -> 项目根（../../）
@@ -519,43 +525,13 @@ function createWindow(url) {
     return { action: 'deny' }
   })
 
-  // 关闭前运行任务确认：比对进行中时不允许静默直接关窗（避免用户误关中断长任务）。
-  // 点击窗口关闭按钮 → close 事件：异步查后端运行任务；有任务弹原生确认框，
-  // 「强制关闭」destroy 窗口放行，否则 preventDefault 取消关闭。
-  let closeGuardArmed = true
+  // 关闭窗口交互：按配置「最小化到托盘」或「直接关闭」，未记住选择时先弹选择框。
+  // 应用真正退出（app.quit / 托盘退出）时 isQuitting 已置位，此处直接放行，避免退出路径再弹框。
   win.on('close', (e) => {
-    // 应用真正退出（app.quit / before-quit 路径）也会触发 close，此时后端已被告知终止，
-    // 走 queryRunningTasks 只会查到无可恢复任务，不必再拦这一道，避免「强制关闭后退出」二次弹窗。
-    if (!closeGuardArmed) return
+    if (isQuitting) return
     e.preventDefault()
-    queryRunningTasks().then((tasks) => {
-      if (!tasks.length) {
-        // 无进行中任务：放行（destroy 后 by window-all-closed 正常退出）。
-        closeGuardArmed = false
-        win.destroy()
-        return
-      }
-      const names = tasks.map((t) => `  · ${t.label || t.id || '未知任务'}`).join('\n')
-      dialog.showMessageBox(win, {
-        type: 'warning',
-        title: '比对仍在进行',
-        message: `检测到 ${tasks.length} 个任务正在进行中：\n${names}\n\n立即关闭将中断这些任务，确定要强制关闭吗？`,
-        buttons: ['取消关闭', '强制关闭'],
-        defaultId: 0,
-        cancelId: 0,
-        noLink: true
-      }).then(({ response }) => {
-        if (response === 1) {
-          closeGuardArmed = false
-          win.destroy()
-        }
-        // response===0 不动作 → 窗口保持打开，进行中任务不受影响
-      }).catch(() => {
-        // 对话框异常（罕见）时保守放行，避免窗口永远关不掉
-        closeGuardArmed = false
-        win.destroy()
-      })
-    })
+    rotateAppend(SHELL_LOG, '[close] event\n')
+    handleCloseRequest(win)
   })
 
   return win // 返回主窗口句柄，供调用方可靠地赋给 mainWindow（避免 getAllWindows()[0] 误取 splash）
@@ -588,6 +564,168 @@ function queryRunningTasks() {
     req.on('error', () => resolve([]))
     req.on('timeout', () => { req.destroy(); resolve([]) })
   })
+}
+
+// ---------- 关闭行为（最小化到托盘 / 直接关闭） ----------
+// 配置落在 userData/close-behavior.json（见 close-behavior.js），首次运行默认
+// 「最小化到托盘 + 不记住」——即每次关闭都先问一次。
+let closeBehavior = null
+
+function currentCloseBehavior() {
+  if (!closeBehavior) closeBehavior = closeBehaviorStore.readStore(app.getPath('userData'))
+  return { ...closeBehavior }
+}
+
+// 写失败返回 null，调用方保持内存旧值（不让 UI 显示成已保存）。
+function persistCloseBehavior(cfg) {
+  const saved = closeBehaviorStore.writeStore(app.getPath('userData'), cfg)
+  if (saved) closeBehavior = saved
+  return saved
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return false
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  if (!mainWindow.isVisible()) mainWindow.show()
+  mainWindow.focus()
+  return true
+}
+
+// 托盘懒创建：仅在用户选了「最小化到托盘」时才出现图标，平时不打扰任务栏。
+// 创建失败返回 false——此时绝不能隐藏窗口，否则用户既看不见窗口也找不回。
+function ensureTray() {
+  if (tray && !tray.isDestroyed()) return true
+  try {
+    let img = fs.existsSync(LOGO) ? nativeImage.createFromPath(LOGO) : nativeImage.createEmpty()
+    if (img.isEmpty()) {
+      // 图标缺失兜底：1x1 透明图，保证托盘项仍可创建（否则窗口会变成关不掉也找不回）
+      img = nativeImage.createFromDataURL(
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==')
+    } else if (process.platform === 'darwin') {
+      img = img.resize({ width: 18, height: 18 }) // macOS 菜单栏图标按 18pt 显示，原图会过大
+    }
+    tray = new Tray(img)
+    tray.setToolTip('BempDiff')
+    tray.setContextMenu(Menu.buildFromTemplate([
+      { label: '显示主窗口', click: () => showMainWindow() },
+      { type: 'separator' },
+      { label: '退出 BempDiff', click: () => quitFromTray() }
+    ]))
+    tray.on('click', () => showMainWindow())
+    tray.on('double-click', () => showMainWindow())
+    rotateAppend(SHELL_LOG, '[tray] created\n')
+    return true
+  } catch (e) {
+    rotateAppend(SHELL_LOG, `[tray] 创建托盘失败：${e && e.message ? e.message : String(e)}\n`)
+    tray = null
+    return false
+  }
+}
+
+// 托盘「退出」也遵守运行任务守卫：有任务在跑先确认，避免托盘一键退出静默中断比对。
+async function quitFromTray() {
+  const tasks = await queryRunningTasks()
+  if (tasks.length && !(await confirmInterrupt(mainWindow, tasks))) return
+  isQuitting = true
+  app.quit()
+}
+
+// 执行关闭动作：托盘隐藏窗口（进程保留），或销毁窗口并退出应用。
+async function applyCloseAction(win, action) {
+  if (action === 'minimize_to_tray') {
+    if (!ensureTray()) {
+      dialog.showMessageBox(win, {
+        type: 'error',
+        title: '无法最小化到托盘',
+        message: '系统托盘不可用，窗口保持打开。',
+        detail: '可改用「直接关闭」，或在设置中把关闭行为改为「直接关闭」。',
+        buttons: ['知道了'],
+        noLink: true
+      }).catch(() => {})
+      return
+    }
+    win.hide()
+    return
+  }
+  isQuitting = true
+  if (win && !win.isDestroyed()) win.destroy()
+  app.quit()
+}
+
+async function askCloseChoice(win, tasks) {
+  const lines = []
+  if (tasks.length) {
+    const names = tasks.map((t) => `  · ${t.label || t.id || '未知任务'}`).join('\n')
+    lines.push(`检测到 ${tasks.length} 个任务正在进行中：\n${names}\n\n最小化到托盘不会中断任务。`)
+  }
+  lines.push('「最小化到托盘」隐藏窗口并保留后台进程；「直接关闭」将退出应用。')
+  const { response, checkboxChecked } = await dialog.showMessageBox(win, {
+    type: tasks.length ? 'warning' : 'question',
+    title: '关闭 BempDiff',
+    message: '要如何处理关闭操作？',
+    detail: lines.join('\n\n'),
+    buttons: ['最小化到托盘', '直接关闭', '取消'],
+    defaultId: 0,
+    cancelId: 2,
+    noLink: true,
+    checkboxLabel: '记住此选择，下次不再提示',
+    checkboxChecked: false
+  })
+  if (response === 0) return { action: 'minimize_to_tray', remember: !!checkboxChecked }
+  if (response === 1) return { action: 'exit_app', remember: !!checkboxChecked }
+  return null // 取消：窗口保持原样
+}
+
+async function confirmInterrupt(win, tasks) {
+  const names = tasks.map((t) => `  · ${t.label || t.id || '未知任务'}`).join('\n')
+  const opts = {
+    type: 'warning',
+    title: '比对仍在进行',
+    message: `检测到 ${tasks.length} 个任务正在进行中：\n${names}\n\n立即关闭将中断这些任务，确定要强制关闭吗？`,
+    buttons: ['取消关闭', '强制关闭'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true
+  }
+  const { response } = win && !win.isDestroyed()
+    ? await dialog.showMessageBox(win, opts)
+    : await dialog.showMessageBox(opts)
+  return response === 1
+}
+
+// 关闭主流程：记住过选择 → 直接执行；否则弹选择框，勾了「记住」才落盘。
+// 选「直接关闭」且仍有运行中任务时，追加一道强制关闭确认（保留原有防误关语义）。
+async function handleCloseRequest(win) {
+  if (closeDialogOpen) return
+  closeDialogOpen = true
+  try {
+    const tasks = await queryRunningTasks()
+    const cfg = currentCloseBehavior()
+    let action = cfg.close_action
+    if (cfg.remember_choice) {
+      rotateAppend(SHELL_LOG, `[close] remembered action=${action} running=${tasks.length}\n`)
+    } else {
+      const choice = await askCloseChoice(win, tasks)
+      if (!choice) {
+        rotateAppend(SHELL_LOG, `[close] dialog cancel running=${tasks.length}\n`)
+        return
+      }
+      action = choice.action
+      if (choice.remember) persistCloseBehavior({ close_action: action, remember_choice: true })
+      rotateAppend(SHELL_LOG, `[close] dialog action=${action} remember=${choice.remember} running=${tasks.length}\n`)
+    }
+    if (action === 'exit_app' && tasks.length && !(await confirmInterrupt(win, tasks))) {
+      rotateAppend(SHELL_LOG, '[close] interrupt confirm cancel\n')
+      return
+    }
+    await applyCloseAction(win, action)
+    rotateAppend(SHELL_LOG, `[close] applied action=${action}\n`)
+  } catch (e) {
+    // 对话框/查询异常（罕见）：保守保持窗口打开，避免「窗口永远关不掉」变成数据风险
+    rotateAppend(SHELL_LOG, `[close] error: ${e && e.stack ? e.stack : String(e)}\n`)
+  } finally {
+    closeDialogOpen = false
+  }
 }
 
 // ---------- 进程回收 ----------
@@ -643,6 +781,14 @@ ipcMain.handle('bempdiff:show-in-folder', async (_event, p) => {
   } catch (e) {
     return String(e && e.message ? e.message : e)
   }
+})
+
+// ---------- 关闭行为读写桥（配置中心「界面与高级」页调用） ----------
+// 设置页切换后立即落盘并更新内存，下一次点击关闭即按新配置执行（无需重启）。
+ipcMain.handle('bempdiff:get-close-behavior', () => ({ ok: true, ...currentCloseBehavior() }))
+ipcMain.handle('bempdiff:set-close-behavior', (_event, cfg) => {
+  const saved = persistCloseBehavior(cfg)
+  return { ok: !!saved, ...(saved || currentCloseBehavior()) }
 })
 
 // ---------- 当前产品版本（preload 同步取常量 → window.bempdiff.appVersion） ----------
@@ -705,8 +851,7 @@ ipcMain.handle('bempdiff:download-install', async (_event, url) => {
 
 // ---------- Shell 集成：单实例锁 + 文件参数（右键菜单 / 命令行 / 拖入） ----------
 // 仅当成功获取单实例锁时才启动；否则说明已有实例运行，把参数转给它后退出。
-let mainWindow = null
-let pendingShellPaths = null
+// mainWindow / pendingShellPaths 状态在文件顶部声明（关闭行为模块也需要主窗口句柄）。
 
 // 从启动参数提取真实存在的文件/目录路径，过滤掉 exe 自身、脚本路径与 flag。
 //   - 打包态：argv = [BempDiff.exe, fileA, fileB]
@@ -740,16 +885,25 @@ if (!gotLock) {
   app.quit()
 } else {
   // 第二实例（用户在资源管理器右键了第二个文件）：把路径转给已运行实例，并把它提到前台。
+  // 主窗口可能正被「最小化到托盘」隐藏，故用 showMainWindow 而非 getAllWindows()[0].focus()。
   app.on('second-instance', (event, argv) => {
-    const w = BrowserWindow.getAllWindows()[0]
-    if (w) { if (w.isMinimized()) w.restore(); w.focus() }
+    if (!showMainWindow()) {
+      const w = BrowserWindow.getAllWindows()[0]
+      if (w) { if (w.isMinimized()) w.restore(); if (!w.isVisible()) w.show(); w.focus() }
+    }
     sendShellCompare(extractPathsFromArgv(argv))
   })
 
+  // 退出路径（app.quit / 托盘退出 / 系统关机）先置位：close 事件据此放行，不再弹关闭对话框。
+  app.on('before-quit', () => { isQuitting = true })
   app.on('before-quit', stopSidecar)
   // 双保险：will-quit 一定在退出前触发（before-quit 可能因窗口关闭竞态/被 preventDefault 跳过）。
   // stopSidecar 内部 taskkill 是幂等的，重复调用无害。
   app.on('will-quit', stopSidecar)
+  app.on('will-quit', () => {
+    if (tray && !tray.isDestroyed()) tray.destroy()
+    tray = null
+  })
 
   app.whenReady().then(async () => {
     let initialUrl
@@ -790,7 +944,9 @@ if (!gotLock) {
     if (initPaths.length) sendShellCompare(initPaths)
 
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindow(initialUrl)
+      // 托盘隐藏的窗口仍在：直接恢复显示，不再新建第二个窗口。
+      if (showMainWindow()) return
+      if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow(initialUrl)
     })
   })
 }

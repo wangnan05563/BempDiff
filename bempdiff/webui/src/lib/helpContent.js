@@ -492,7 +492,7 @@ export const CATEGORIES = [
         introEn: 'Everything is configured in the Settings dialog: AI service, parse & export, diff tree filter, UI & advanced, help, about.',
         keywordsEn: ['settings', 'config', 'ai service', 'parse', 'export', 'filter', 'about'],
         blocksEn: [
-          list(['AI Service: provider preset, Base URL, model (fetch the list), API Key (not persisted by default), proxy, strict SSRF, connection test, token caps and cost gate.', 'Parse & Export: internal package prefixes, expand-all, unpack threads / max depth, Top-K, external CFR jar, project context, config migration, temp cleanup and sanitized diagnostic bundle.', 'Diff Tree Filter: search key / regex, which statuses to show, ignored file types and custom extensions.', 'UI & Advanced: auto AI report after compare, project-level context, appearance-related defaults.', 'Help: this document and the guide button; About: version and update check.']),
+          list(['AI Service: provider preset, Base URL, model (fetch the list), API Key (not persisted by default), proxy, strict SSRF, connection test, token caps and cost gate.', 'Parse & Export: internal package prefixes, expand-all, unpack threads / max depth, Top-K, external CFR jar, project context, config migration, temp cleanup and sanitized diagnostic bundle.', 'Diff Tree Filter: search key / regex, which statuses to show, ignored file types and custom extensions.', 'UI & Advanced: auto AI report after compare, project-level context, close-window behavior and other appearance defaults.', 'Help: this document and the guide button; About: version and update check.']),
           note('The API Key stays in backend memory unless you tick "Remember API Key"; config export excludes the plaintext key by default.'),
         ],
         blocks: [
@@ -500,10 +500,33 @@ export const CATEGORIES = [
             'AI 服务：厂商预设、Base URL、模型（可一键拉取列表）、API Key（默认不落盘）、HTTP/HTTPS 代理、严格 SSRF、连接测试、输入/输出 Token 上限与成本闸门。',
             '解析与导出：内部包前缀、展开全部 class、解包线程数与最大深度、Top-K、自定义 CFR jar、项目级上下文、配置迁移、临时文件清理与脱敏诊断包导出。',
             '差异树过滤：搜索关键字与正则、显示哪些状态、忽略的文件类型与自定义后缀。',
-            '界面与高级：比对后自动生成 AI 报告、项目级上下文增强等。',
+            '界面与高级：比对后自动生成 AI 报告、项目级上下文增强、关闭窗口行为等。',
             '帮助文档：本文档与引导按钮；关于：版本信息与更新检查。',
           ]),
           note('API Key 默认只存在后端内存，勾选「记住 API Key」才落盘；导出配置默认不包含明文密钥。'),
+        ]
+      }),
+      entry({
+        id: 'close_behavior',
+        title: '关闭窗口：托盘与不再提示',
+        intro: '点击右上角关闭时可选「最小化到托盘」或「直接关闭应用」，并能记住选择、以后不再弹窗。',
+        keywords: ['关闭', '托盘', '最小化', '退出', '记住选择', '不再提示', '后台运行'],
+        titleEn: 'Close behavior: tray or quit',
+        introEn: 'On close you can minimize to the tray or quit the app, and remember that choice to skip the prompt later.',
+        keywordsEn: ['close', 'tray', 'minimize', 'quit', 'remember', 'no prompt', 'background'],
+        blocksEn: [
+          list(['The first close shows a prompt with Minimize to Tray / Quit App / Cancel and a "Remember my choice" checkbox.', 'Ticking "Remember" stores the chosen action in the local config; later closes run it directly without asking.', 'Without the tick only that one action is performed and the config stays untouched, so the next close asks again.', 'Minimize to Tray hides the window while the app keeps running; bring it back from the tray icon or by launching the app once more.', 'Change or clear the behavior anytime under Settings -> UI & Advanced -> Close behavior; it is saved immediately and applies to the next close.']),
+          note('Choosing Quit App while a compare is still running asks for a second confirmation so nothing is interrupted by mistake; minimizing to the tray never interrupts a task.'),
+        ],
+        blocks: [
+          list([
+            '首次点击右上角关闭会弹出选择框：「最小化到托盘」/「直接关闭」/「取消」，并带「记住此选择，下次不再提示」复选框。',
+            '勾选「记住」后，所选动作写入本机配置，之后点关闭直接执行、不再弹窗。',
+            '不勾选则只执行本次动作，配置保持不变，下次关闭仍会询问。',
+            '「最小化到托盘」隐藏窗口并保留后台进程，点托盘图标或再次启动应用即可恢复窗口。',
+            '随时可在「设置 → 界面与高级 → 关闭窗口行为」更改动作或取消记住，改动立即保存、下次关闭生效。',
+          ]),
+          note('有比对任务进行中时选「直接关闭」会再确认一次，避免误中断；最小化到托盘不会中断任务。'),
         ]
       }),
       entry({

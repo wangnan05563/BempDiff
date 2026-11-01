@@ -28,6 +28,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "close-behavior.js",
       "package.json"
     ],
     "extraResources": [

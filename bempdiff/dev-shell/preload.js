@@ -54,6 +54,21 @@ contextBridge.exposeInMainWorld('bempdiff', {
     return ipcRenderer.invoke('bempdiff:download-install', url)
   },
   /**
+   * 读取「关闭窗口行为」配置（最小化到托盘 / 直接关闭 + 是否记住选择）。
+   * @returns {Promise<{ok:boolean, close_action:string, remember_choice:boolean}>}
+   */
+  getCloseBehavior() {
+    return ipcRenderer.invoke('bempdiff:get-close-behavior')
+  },
+  /**
+   * 更新「关闭窗口行为」配置：主进程立即落盘，下一次关闭按新配置执行。
+   * @param {{close_action?: string, remember_choice?: boolean}} cfg
+   * @returns {Promise<{ok:boolean, close_action:string, remember_choice:boolean}>}
+   */
+  setCloseBehavior(cfg) {
+    return ipcRenderer.invoke('bempdiff:set-close-behavior', cfg)
+  },
+  /**
    * 注册「外部入口传入比对路径」监听（右键菜单 / 命令行参数）。
    * 主进程在收到文件参数时通过 webContents.send('bempdiff:shell-compare', paths) 推送；
    * 渲染进程（store.init）据此自动填路径并比对。

@@ -188,6 +188,9 @@ watch(() => props.visible, (v) => {
     // 打开配置中心即查询上下文索引状态（读缓存秒回；让用户一眼看到「是否已生效」）
     if (form.projectContextEnabled && form.projectContextDir) loadContextStatus()
     else state.aiContext = { loading: false, data: null, error: '' }
+    // 关闭行为存在主进程，与后端配置无关：每次打开都重新读取，避免展示过期的内存副本
+    closeMsg.value = ''
+    loadCloseBehavior()
   }
 })
 
@@ -243,6 +246,48 @@ const pickTitle = computed(() => canPick.value
 async function pickContextDir() {
   const p = await pickPath({ directory: true })
   if (p) form.projectContextDir = p
+}
+
+// ---- 关闭窗口行为（桌面壳主进程持有的 close-behavior.json，不进后端配置） ----
+// 与 form 分开：切换即落盘，不走「保存」按钮，避免用户改完不点保存以为已生效。
+const desktopShell = computed(() => isElectron())
+const closeBridge = computed(() => desktopShell.value && typeof window.bempdiff.getCloseBehavior === 'function')
+const closeBehavior = reactive({ close_action: 'minimize_to_tray', remember_choice: false })
+const closeBusy = ref(false)
+const closeMsg = ref('')
+async function loadCloseBehavior() {
+  if (!closeBridge.value) return
+  try {
+    const c = await window.bempdiff.getCloseBehavior()
+    if (c && c.ok !== false) {
+      closeBehavior.close_action = c.close_action
+      closeBehavior.remember_choice = c.remember_choice === true
+    }
+  } catch (_) { /* 读失败保持默认值展示，不阻断配置中心 */ }
+}
+async function onCloseBehaviorChange() {
+  if (!closeBridge.value) return
+  closeBusy.value = true
+  closeMsg.value = ''
+  try {
+    const r = await window.bempdiff.setCloseBehavior({
+      close_action: closeBehavior.close_action,
+      remember_choice: !!closeBehavior.remember_choice
+    })
+    if (r && r.ok) {
+      closeBehavior.close_action = r.close_action
+      closeBehavior.remember_choice = r.remember_choice === true
+      closeMsg.value = t('cfg.closeBehavior.saved')
+    } else {
+      closeMsg.value = ''
+      toast('danger', t('cfg.closeBehavior.saveFail'))
+    }
+  } catch (e) {
+    closeMsg.value = ''
+    toast('danger', t('cfg.closeBehavior.saveFail'))
+  } finally {
+    closeBusy.value = false
+  }
 }
 
 // 按当前 API Base URL + Key 拉取可用模型列表，写入 state.aiModels 供下方 datalist 补全。
@@ -652,6 +697,39 @@ function pickImportFile(ev) {
 
           <!-- 界面与高级 -->
           <div v-show="cfgTab==='ui'">
+            <!-- 关闭窗口行为（仅桌面壳生效）：设置页改动立即落盘并更新主进程内存，
+                 下一次点关闭即按新配置执行；未勾选「记住」时关闭仍会弹一次选择框。 -->
+            <div class="card card-body py-2 mb-2 close-behavior-card" style="font-size:.76rem">
+              <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                <span class="fw-semibold text-nowrap"><i class="bi bi-x-square"></i>{{ t('cfg.closeBehavior') }}</span>
+                <span class="text-secondary">{{ t('cfg.closeBehavior.desc') }}</span>
+              </div>
+              <div v-if="!desktopShell" class="text-secondary" style="font-size:.72rem">{{ t('cfg.closeBehavior.unavailable') }}</div>
+              <template v-else>
+                <div class="d-flex flex-wrap gap-3 mb-1">
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="cfgCloseAction" id="cfgCloseTray" value="minimize_to_tray"
+                           v-model="closeBehavior.close_action" :disabled="closeBusy" @change="onCloseBehaviorChange"
+                           :aria-label="t('cfg.closeBehavior.tray')" :title="t('cfg.closeBehavior.tray')">
+                    <label class="form-check-label" for="cfgCloseTray" :title="t('cfg.closeBehavior.tray')">{{ t('cfg.closeBehavior.tray') }}</label>
+                  </div>
+                  <div class="form-check">
+                    <input class="form-check-input" type="radio" name="cfgCloseAction" id="cfgCloseExit" value="exit_app"
+                           v-model="closeBehavior.close_action" :disabled="closeBusy" @change="onCloseBehaviorChange"
+                           :aria-label="t('cfg.closeBehavior.exit')" :title="t('cfg.closeBehavior.exit')">
+                    <label class="form-check-label" for="cfgCloseExit" :title="t('cfg.closeBehavior.exit')">{{ t('cfg.closeBehavior.exit') }}</label>
+                  </div>
+                </div>
+                <div class="form-check mb-1">
+                  <input class="form-check-input" type="checkbox" id="cfgCloseRemember" v-model="closeBehavior.remember_choice"
+                         :disabled="closeBusy" @change="onCloseBehaviorChange"
+                         :aria-label="t('cfg.closeBehavior.rememberHint')" :title="t('cfg.closeBehavior.rememberHint')">
+                  <label class="form-check-label" for="cfgCloseRemember" :title="t('cfg.closeBehavior.rememberHint')">{{ t('cfg.closeBehavior.remember') }}</label>
+                </div>
+                <div class="form-text" style="font-size:.72rem">{{ closeBehavior.remember_choice ? t('cfg.closeBehavior.hintOn') : t('cfg.closeBehavior.hintOff') }}</div>
+                <div v-if="closeMsg" class="mt-1 text-success" style="font-size:.72rem"><i class="bi bi-check-circle"></i> {{ closeMsg }}</div>
+              </template>
+            </div>
             <div class="form-check form-check-inline mb-2">
               <input class="form-check-input" type="checkbox" id="cfgPersist" v-model="form.persistApiKey" :aria-label="t('cfg.persist.hint')" :title="t('cfg.persist.hint')">
               <label class="form-check-label" for="cfgPersist" :title="t('cfg.persist.hint')">{{ t('cfg.persist') }}</label>
