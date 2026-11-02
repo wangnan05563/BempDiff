@@ -3,6 +3,8 @@
 > 目标：解决当前 JavaFX GUI 的两大痛点——① UI 美观度天花板低（BootstrapFX 非真 Bootstrap，无 Flexbox/Grid）；② 打包脆弱（jpackage + jlink 模块裁剪踩坑，已修 `jdk.crypto.ec` 但本质是把"反编译引擎的桌面壳"做得过重）。
 > 核心结论：**保留 `java_core` 纯 Java 后端不动，仅替换 UI 层**。后端新增一个内嵌 HTTP 服务（`server` 子命令），前端用 Web 技术（Vue 3 + Bootstrap 5.3.3，复用现有 `ui_prototype.html` 设计基线）实现三栏布局。打包采用 **Tauri 2.x 桌面壳**（Rust + WebView2，把 JRE+jar 作为 sidecar 打包，原生对话框免上传）；核心服务仍为内嵌 HTTP + 本地 SPA（与"浏览器启动器"路径共用同一套前后端，仅外壳不同）。
 
+> **现状修正（2026-11-02，T04092）**：本文是 2026-08 的迁移方案记录。其中选定为最终方案的「路径 B：Tauri 2.x 桌面壳」曾以 in-tree 备选形态保留，但发布链路已全面切换 Electron + electron-builder；Tauri 侧实现（`bempdiff/src-tauri/`、`webui/.tauri-placeholder/`、`webui/src/lib/tauri.js` 的 Tauri 分支、打包编排脚本的 `cargo tauri icon/build` 步骤）已于 T04092 剔除，编排脚本更名为 `bempdiff/scripts/build_dist_input.ps1`（只装配 dist_input，不再出安装包）。本文其余结论（保留 `java_core` 后端、内嵌 HTTP + Web SPA、jlink 瘦 JRE）仍然成立；下文提及的 Tauri 文件与命令均为历史记录。
+
 ---
 
 ## 0. 现状与约束（已核实）
@@ -161,7 +163,7 @@ P0/P1 已完成（API 契约 + `server` 子命令端到端验证通过）。下�
 
 ---
 
-## 9. P4(B) Tauri 桌面壳落地（2026-08-14）
+## 9. P4(B) Tauri 桌面壳落地（2026-08-14，已随 T04092 退役）
 
 > P3 已交付全功能 Web UI（三栏 + 报告预览 + 原生对话框 stub + 后端 `server` 子命令端到端验证通过）。P4 落地 Tauri 2.x 桌面壳，把「内嵌 JRE + bempdiff.jar + 前端 dist」打包为双击即用的 Windows 安装包。
 

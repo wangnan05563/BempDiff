@@ -773,7 +773,7 @@ function onTabMouseDown(e, key) {
 }
 
 // ===================== tab 标题右键菜单（BCompare 风格） =====================
-// 桌面壳能力检测：复制到剪贴板 / 系统级「在资源管理器中显示」仅在 Electron/Tauri 可用。
+// 桌面壳能力检测：复制到剪贴板 / 系统级「在资源管理器中显示」仅在 Electron 桌面壳可用。
 const tabCtx = ref({ visible: false, x: 0, y: 0, key: null })
 const tabCtxNode = ref(null) // 当前右键的 tab 及其 node（用于路径解析）
 const hasShell = computed(() => !!(typeof window !== 'undefined' && window.bempdiff &&

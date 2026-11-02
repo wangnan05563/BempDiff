@@ -12,8 +12,7 @@ const { pickPath, state, toast } = vi.hoisted(() => ({
   state: { oldPath: '', newPath: '', leftType: 'package', job: null, exporting: false },
   toast: vi.fn()
 }))
-vi.mock('../lib/tauri', () => ({
-  isTauri: () => false,
+vi.mock('../lib/desktop-bridge', () => ({
   isElectron: () => true,
   pickPath: (...a) => pickPath(...a)
 }))

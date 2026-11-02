@@ -45,6 +45,8 @@
 - 与项目历史一致（2026-08-16 记录）：「`build_tauri_app.ps1` 与 `node_modules/@tauri-apps/cli` 已是死代码（未被任何脚本引用），可后续清理」；
 - 打包链路已于 2026-08-28 全面切换到 **electron-builder + NSIS**，Tauri 2 退役。
 
+> **更正（2026-11-02，T04092）**：上面「配套的 `build_tauri_app.ps1` 同为死代码」只对它的 `cargo tauri icon` / `cargo tauri build` 两段成立。该脚本的 1~4 步（编译 `bempdiff.jar`、分发 POI lib、jlink 瘦 JRE、构建并镜像 `dist_input/webui`）是 electron-builder、CI（`.github/workflows/build-arm64.yml`）、一键发布与压测链路共用的装配入口，并非死代码。T04092 已剥离其中的 Tauri 步骤、脚本更名为 `bempdiff/scripts/build_dist_input.ps1`，并删除 `bempdiff/src-tauri/` 与 `bempdiff/webui/.tauri-placeholder/`。
+
 **建议动作**：`npm uninstall @tauri-apps/cli` + 删除 `scripts.tauri` 条目。
 **附带收益**：`node_modules/@tauri-apps/cli` 含 `cli.win32-x64-msvc.node` 14.5 MB 等平台二进制，卸载可回收约 **14 MB+**。
 

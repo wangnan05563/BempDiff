@@ -136,7 +136,7 @@ if (Test-Path -LiteralPath $assetsDir) {
     Write-Host "[ERROR] T01670: packaged webui/assets/ contains EXTRA files not referenced by index.html:"
     foreach ($f in $extras) { Write-Host ("        extra: " + $f) }
     Write-Host ("        assets dir: " + $assetsDir)
-    Write-Host "        Fix: ensure build_tauri_app.ps1 clears webui/dist before npm run build"
+    Write-Host "        Fix: ensure build_dist_input.ps1 clears webui/dist before npm run build"
     exit 1
   }
   Write-Host ("[OK] T01670: no extra bundles in packaged assets/ (" + $actualFiles.Count + " files, all referenced)")

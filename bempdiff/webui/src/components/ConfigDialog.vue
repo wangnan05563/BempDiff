@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { state, saveConfig, testConnection, fetchModels, loadContextStatus, defaultConfig, toast } from '../store'
 import { api } from '../api/client'
-import { pickPath, isElectron, isTauri } from '../lib/tauri.js'
+import { pickPath, isElectron } from '../lib/desktop-bridge.js'
 import { t } from '../lib/i18n'
 
 // 断点续录：未保存就关闭配置中心时，把当前表单草稿暂存本地，下次打开恢复。
@@ -238,7 +238,7 @@ function onProviderChange() {
   prevProviderKey = newP.key
 }
 
-const canPick = computed(() => isElectron() || isTauri())
+const canPick = computed(() => isElectron())
 const pickTitle = computed(() => canPick.value
   ? t('cfg.pick.title')
   : t('cfg.pick.browser'))

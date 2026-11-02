@@ -11,7 +11,7 @@
 
   检查与执行分离：-DryRun 只做前置评估 + 打印计划，绝不生成夹具/构建/拉服务。
 .PARAMETER Build
-  若 dist_input/app、dist_input/jre 缺失，则调用 build_tauri_app.ps1 装配 Java 侧。
+  若 dist_input/app、dist_input/jre 缺失，则调用 build_dist_input.ps1 装配 Java 侧。
 .PARAMETER ForceBuild
   无论产物是否存在都重新装配（带 -Clean）。
 .PARAMETER Port
@@ -56,7 +56,7 @@ $fixtures  = Join-Path $proto "fixtures"
 $jmeterDir = Join-Path $root "tooling/jmeter"
 $results   = Join-Path $jmeterDir "results"
 $logs      = Join-Path $root "logs"
-$buildScript = Join-Path (Join-Path $proto "scripts") "build_tauri_app.ps1"
+$buildScript = Join-Path (Join-Path $proto "scripts") "build_dist_input.ps1"
 $managedPy = "C:\Users\hspcadmin\.workbuddy\binaries\python\versions\3.13.12\python.exe"
 
 if (-not (Test-Path $logs)) { New-Item -ItemType Directory -Force -Path $logs | Out-Null }
@@ -94,7 +94,7 @@ $needBuild = (-not (Test-Path $bempJar)) -or (-not (Test-Path $cfrJar)) -or (-no
 if ($ForceBuild) { $needBuild = $true }
 if ($needBuild) {
     if (-not $Build -and -not $ForceBuild) {
-        $errors.Add("构建产物缺失，请加 -Build 自动装配，或用 bempdiff\scripts\build_tauri_app.ps1 预先构建。")
+        $errors.Add("构建产物缺失，请加 -Build 自动装配，或用 bempdiff\scripts\build_dist_input.ps1 预先构建。")
     }
 }
 
@@ -132,7 +132,7 @@ $planList | ForEach-Object { Write-Host ("  - " + $_) }
 # ================= DryRun 早退（不执行任何副作用） =================
 if ($DryRun) {
     Write-Host "`n== DryRun：仅前置检查 + 计划，不构建 / 不生成 / 不拉起服务 / 不跑压测 ==" -ForegroundColor Yellow
-    if ($needBuild) { Write-Host "  [将执行] 装配 Java 侧（build_tauri_app.ps1 -AssembleOnly -SkipFrontend -SkipCargo）" -ForegroundColor Yellow }
+    if ($needBuild) { Write-Host "  [将执行] 装配 Java 侧（build_dist_input.ps1 -SkipFrontend）" -ForegroundColor Yellow }
     if ($needFix)   { Write-Host "  [将执行] gen_fixtures.py" -ForegroundColor Yellow }
     if ($needJmx)   { Write-Host "  [将执行] gen_jmx.py" -ForegroundColor Yellow }
     if ($errors.Count -gt 0) {
@@ -153,9 +153,9 @@ if ($errors.Count -gt 0) {
 
 # ================= 执行：构建（如需） =================
 if ($needBuild) {
-    Write-Host "`n== 装配 Java 侧（build_tauri_app.ps1）==" -ForegroundColor Cyan
-    $buildArgs = @('-AssembleOnly', '-SkipFrontend', '-SkipCargo')
-    if ($ForceBuild) { $buildArgs = @('-Clean', '-AssembleOnly', '-SkipFrontend', '-SkipCargo') }
+    Write-Host "`n== 装配 Java 侧（build_dist_input.ps1）==" -ForegroundColor Cyan
+    $buildArgs = @('-SkipFrontend')
+    if ($ForceBuild) { $buildArgs = @('-Clean', '-SkipFrontend') }
     & $buildScript @buildArgs 2>&1 | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) { Write-Host ("装配失败 rc=$LASTEXITCODE，终止。") -ForegroundColor Red; exit 1 }
 }

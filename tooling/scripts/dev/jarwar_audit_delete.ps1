@@ -1,15 +1,15 @@
 ﻿<#
 .SYNOPSIS
-  新架构（Tauri 2 桌面壳 + jlink 瘦 JRE）构建产物审计清理脚本。
+  新架构（Electron 桌面壳 + jlink 瘦 JRE）构建产物审计清理脚本。
 .DESCRIPTION
   递归清理 bempdiff\dist_input\app 与 bempdiff\dist_input\jre 两个目录
-  （对应 build_tauri_app.ps1 的 $AppDir / $JreOut），删除前先记录每个文件的
+  （对应 build_dist_input.ps1 的 $AppDir / $JreOut），删除前先记录每个文件的
   SHA-256 + 大小到 logs\ 审计清单，便于事后追溯。
 
   - 不触碰 bempdiff\fixtures\*（性能测试夹具，仍被 perf 使用，非构建产物）。
   - 默认不清理旧 javafx 扁平布局；如需清理历史遗留的 app.jar / javafx-* / ikonli-*
     扁平 jar，可加 -Legacy 开关（默认关闭，避免误删）。整体清空 dist_input 用
-    bempdiff\scripts\build_tauri_app.ps1 -Clean 更彻底。
+    bempdiff\scripts\build_dist_input.ps1 -Clean 更彻底。
 
   删除走直接 .NET 调用，绕过本环境 safe-delete 钩子（fail-closed）。
 .PARAMETER WhatIf

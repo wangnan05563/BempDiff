@@ -5,7 +5,7 @@
 中心绿色徽章内嵌左右双向箭头（象征 diff/比对）。
 
 产物：
-  bempdiff/bempdiff-logo.png                         # 高清母版（≥1024），供 Tauri build 的 `cargo tauri icon` 源（build 脚本 $Logo）
+  bempdiff/bempdiff-logo.png                         # 高清母版（≥1024），electron-builder 的 build.win.icon 直接用（也供 logo 展示）
   bempdiff/assets/bempdiff.ico                       # 遗留：旧 jpackage --icon（已退役；assets/ 仍有效，仅留作参考）
 
 依赖：Pillow（managed Python: pip install pillow）
@@ -80,7 +80,7 @@ def draw_icon(s):
 SIZES = [16, 24, 32, 48, 64, 128, 256]
 frames = {s: draw_icon(s) for s in SIZES}
 
-# 高清母版（≥1024），供 Tauri `cargo tauri icon` 生成多分辨率安装包图标，源越大越锐利
+# 高清母版（≥1024），供 electron-builder 生成多分辨率安装包图标，源越大越锐利
 MASTER = 1024
 frames[MASTER] = draw_icon(MASTER)
 frames[MASTER].save(PNG_PATH, format='PNG')

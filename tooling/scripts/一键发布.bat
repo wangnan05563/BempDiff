@@ -16,7 +16,7 @@ REM
 REM 安全试运行（仅构建 + 打印将要发布的动作，不真正发到 GitHub）：
 REM         set GH_DRY_RUN=1 && tooling\scripts\一键发布.bat
 REM
-REM 前置：Node + npm、JDK21（build_tauri_app.ps1 自动探测 zulu/本机 JDK）、
+REM 前置：Node + npm、JDK21（build_dist_input.ps1 自动探测 zulu/本机 JDK）、
 REM       git（用于推断仓库/标签/分支，并从 git 凭据库取 github.com 令牌）
 REM ============================================================
 
@@ -50,7 +50,7 @@ if errorlevel 1 ( echo [失败] dev-shell 依赖安装失败 & exit /b 1 )
 
 REM ============ 2) 组装 dist_input（编译 jar + jlink JRE + 前端） ============
 echo [2/4] 组装 dist_input（编译 jar + jlink 最小 JRE + 构建前端）...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%BEMPDIFF%\scripts\build_tauri_app.ps1" -AssembleOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File "%BEMPDIFF%\scripts\build_dist_input.ps1"
 if errorlevel 1 ( echo [失败] 组装 dist_input 失败，终止发布 & exit /b 1 )
 
 REM ============ 3) electron-builder 打 NSIS 安装包（x64） ============

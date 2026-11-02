@@ -1,7 +1,7 @@
-// BempDiff 桌面壳桥接（Electron / Tauri）路由单测。
-// 直接 import 真实模块 webui/src/lib/tauri.js，mock window 全局。
+// BempDiff 桌面壳桥接（Electron）路由单测。
+// 直接 import 真实模块 webui/src/lib/desktop-bridge.js，mock window 全局。
 // 运行：node bempdiff/scripts/test_desktop_picker.mjs
-import { isElectron, isTauri, pickPath } from '../webui/src/lib/tauri.js'
+import { isElectron, pickPath } from '../webui/src/lib/desktop-bridge.js'
 
 let pass = 0, fail = 0
 function check(name, cond) {
@@ -21,16 +21,14 @@ function deepEq(a, b) {
 // 提供 window 全局（Node 里没有），便于测试探测函数读 typeof window !== 'undefined'。
 globalThis.window = {}
 
-// 工具：清空 window.bempdiff / window.__TAURI* 桥
+// 工具：清空 window.bempdiff 桥
 function resetBridges() {
   try { delete globalThis.window.bempdiff } catch { globalThis.window.bempdiff = undefined }
-  try { delete globalThis.window.__TAURI__ } catch { globalThis.window.__TAURI__ = undefined }
-  try { delete globalThis.window.__TAURI_INTERNALS__ } catch { globalThis.window.__TAURI_INTERNALS__ = undefined }
 }
 
 // 集中执行，避免异步检查漂移
 ;(async () => {
-  // ── A2/A3 isElectron 探测 ───────────────────────────────────────
+  // ── A1/A2/A3 isElectron 探测 ─────────────────────────────────────
   resetBridges()
   check('A2 无 window.bempdiff → isElectron=false', isElectron() === false)
 
@@ -39,12 +37,6 @@ function resetBridges() {
 
   globalThis.window.bempdiff = { pickPath: () => {} }
   check('A1 window.bempdiff.pickPath 是函数 → isElectron=true', isElectron() === true)
-
-  // ── A4/A5 isTauri 探测 ───────────────────────────────────────────
-  resetBridges()
-  check('A5 浏览器场景无 __TAURI_INTERNALS__ → isTauri=false', isTauri() === false)
-  globalThis.window.__TAURI_INTERNALS__ = {}
-  check('A4 有 __TAURI_INTERNALS__ → isTauri=true', isTauri() === true)
 
   // ── A6 浏览器（无桌面壳）→ pickPath 返回 null ───────────────────
   resetBridges()
@@ -67,23 +59,6 @@ function resetBridges() {
   check('A8 Electron 多选透传 opts', deepEq(receivedA8, { directory: false, multiple: true }))
   check('A8 Electron 多选返回数组', Array.isArray(r2) && r2.length === 2)
 
-  // ── A10 Electron 优先于 Tauri（同存时走 Electron） ─────────────
-  resetBridges()
-  globalThis.window.bempdiff = { pickPath: async () => 'ELECTRON' }
-  globalThis.window.__TAURI__ = { dialog: { open: async () => 'TAURI' } }
-  globalThis.window.__TAURI_INTERNALS__ = {}
-  const r3 = await pickPath({})
-  check('A10 Electron + Tauri 共存时优先走 Electron', r3 === 'ELECTRON')
-
-  // ── A9 Tauri-only 路由 ──────────────────────────────────────────
-  resetBridges()
-  let receivedA9 = null
-  globalThis.window.__TAURI__ = { dialog: { open: async (opts) => { receivedA9 = opts; return '/tauri/sel.war' } } }
-  globalThis.window.__TAURI_INTERNALS__ = {}
-  const r4 = await pickPath({ directory: false, multiple: true })
-  check('A9 Tauri-only 走 __TAURI__.dialog.open', r4 === '/tauri/sel.war')
-  check('A9 Tauri-only 透传 opts', deepEq(receivedA9, { directory: false, multiple: true }))
-
   // ── A11 Electron 桥接抛错 → pickPath 返回 null，不向上抛 ───────────
   resetBridges()
   globalThis.window.bempdiff = { pickPath: async () => { throw new Error('user cancelled modal') } }
@@ -91,13 +66,11 @@ function resetBridges() {
   const r5 = await pickPath({}).catch(e => { caught = e; return 'thrown' })
   check('A11 Electron 桥接抛错被捕获、pickPath 返回 null', r5 === null && caught === null)
 
-  // ── A12 Electron 桥接返回 null（取消）→ 不再 fall-through 到 Tauri ─
+  // ── A12 Electron 桥接返回 null（用户取消）→ 原样返回 null ─────────
   resetBridges()
   globalThis.window.bempdiff = { pickPath: async () => null }
-  globalThis.window.__TAURI__ = { dialog: { open: async () => 'TAURI' } }
-  globalThis.window.__TAURI_INTERNALS__ = {}
   const r6 = await pickPath({})
-  check('A12 Electron 返回 null 时不再 fall-through Tauri', r6 === null)
+  check('A12 Electron 返回 null（取消）时原样返回 null', r6 === null)
 
   console.log(`desktop picker: PASS=${pass} FAIL=${fail} (total ${pass + fail})`)
   process.exit(fail ? 1 : 0)

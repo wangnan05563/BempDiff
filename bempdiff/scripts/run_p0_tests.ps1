@@ -1,7 +1,7 @@
 ﻿# BempDiff 单测运行器（Windows / 本机）。
 # 顺序执行：
 #   [1/4] 前端 P0 算法单测（inlineDiff / foldContext / matchSev）
-#   [2/4] 前端 桌面壳桥接单测（Electron preload 桥 / Tauri dialog.open / null 兜底）
+#   [2/4] 前端 桌面壳桥接单测（Electron preload 桥 / 浏览器 null 兜底）
 #   [3/4] 前端 多 tab 对比单测（DiffView 升级后左树多开并存）
 #   [4/4] 后端 P0-② DiffRules 单测（行级 diff 忽略规则）
 # 任一失败即非零退出。结果同时写入 scripts/_p0_result.txt（无控制台环境可审计）。

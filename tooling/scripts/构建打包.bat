@@ -97,9 +97,9 @@ popd
 echo [OK] webui/dist ready.
 
 REM ---------- 4. Unified assemble: force rebuild Java jar/classes + refresh dist_input/webui ----------
-REM   Reuses build_tauri_app.ps1 (Tauri) assemble logic so BOTH packagers share ONE refreshed dist_input.
+REM   Reuses build_dist_input.ps1 assemble logic so BOTH packagers share ONE refreshed dist_input.
 echo [STEP] Assembling dist_input (recompile jar, refresh webui) ...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\scripts\build_tauri_app.ps1" -AssembleOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\scripts\build_dist_input.ps1"
 if errorlevel 1 (
   echo [ERROR] assemble failed - check bempdiff\build_native.log
   pause

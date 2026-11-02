@@ -6,10 +6,10 @@
 #   → 包内架构深校 → 安装/启动冒烟（sidecar 18765 监听）。
 #
 # 与 Windows 版的差异（都是有意的）：
-#  1. assemble 不复用 build_tauri_app.ps1——该脚本强 Windows 依赖
+#  1. assemble 不复用 build_dist_input.ps1——该脚本强 Windows 依赖
 #     （javac.exe/taskkill/cmd rmdir），unix runner 上不可靠。这里用
 #     等价的 bash 内联三步（javac → jar cfe → 分发 cfr/lib/webui），
-#     产物结构与 -AssembleOnly 完全一致。正式产线仍是 Windows bat。
+#     产物结构与 build_dist_input.ps1 的装配结果完全一致。正式产线仍是 Windows bat。
 #  2. JRE 就位不走 switch-jre.mjs（那是 Windows 产线的原子换入工具）：
 #     CI 全新检出是一次性环境，直接 rm + cp -a 换入目标架构归档。
 #     macOS 归档 Contents/Home/* 扁平化后就位 → 壳内路径与 linux 同构
@@ -90,7 +90,7 @@ jobs:
           file bempdiff/dist_input/jre/bin/java
           file bempdiff/dist_input/jre/bin/java | grep -q 'ARM aarch64' || { echo 'JRE 非 aarch64'; exit 1; }
 
-      - name: 组装 dist_input（等价 build_tauri_app.ps1 -AssembleOnly 的三步）
+      - name: 组装 dist_input（等价 build_dist_input.ps1 的三步）
         run: |
           set -euo pipefail
           B=bempdiff

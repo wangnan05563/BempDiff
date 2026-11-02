@@ -15,14 +15,12 @@ scripts/__pycache__/
 scripts/_testcls/
 scripts/_p0_result.txt
 
-# Tauri 打包编排脚本的产物（由 scripts/build_tauri_app.ps1 生成，非源码）
+# 构建输入装配脚本的产物（由 scripts/build_dist_input.ps1 生成，非源码）
 dist_input/
-src-tauri/target/
-src-tauri/gen/
 webui/dist_verify/
 webui/.npmcache2/
 
 # Electron 打包产物已调整到项目根目录 18_comparePakage/release，忽略规则见根 .gitignore
 
-# 依赖安装目录（Tauri 时代误入库，已解除跟踪；勿再提交）
+# 依赖安装目录（历史误入库，已解除跟踪；勿再提交）
 node_modules/

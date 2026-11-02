@@ -3,17 +3,16 @@
 <head>
   <meta charset="UTF-8" />
   <!--
-    启动图（Splash）页面：由 Tauri 桌面壳在「生产启动阶段」以本地 WebviewUrl::App 加载，
+    启动图（Splash）页面：由 Electron 桌面壳在「生产启动阶段」以 loadFile 本地加载，
     全程不依赖 Java 后端 —— 后端 sidecar 就绪前即可秒显，消除启动空窗/连接失败白屏。
 
     交互：
-      - Rust 侧按真实的启动里程碑推送 `splash-progress` 事件（{ stage, percent }），
-        本页据此更新进度条宽度与阶段文案，保证「进度对应实际加载、不伪造」。
-      - 后端就绪后由 Rust 直接关闭本窗口并切到主窗口（无需本页做任何跳转）。
-      - 纯浏览器里打开本页（无 Tauri 运行时）时降级为不确定进度动画，便于 UI 预览。
+      - 本页只做「正在启动」的不确定进度动画；后端就绪、主窗口 ready-to-show 后由主进程
+        直接关闭本窗并切到主窗口（见 dev-shell/main.js createSplashWindow / closeSplash），
+        进度不伪造，也不承诺具体百分比。
+      - 纯浏览器里打开本页同样展示动画，便于 UI 预览。
 
     资源：启动图为 ./splash-logo.png（复制自项目 bempdiff-logo.png，可替换）。
-    刻度映射见 src-tauri/src/lib.rs `launch_java` 中的 splash(...) 调用。
   -->
   <title>BempDiff — 启动中</title>
   <style>
@@ -85,7 +84,7 @@
       transition: width .28s ease;
     }
 
-    /* 降级态：不确定进度（Rust 事件未连上时，浏览器预览也能展示动效） */
+    /* 不确定进度（常态动画：桌面壳关闭本窗前没有可订阅的进度源） */
     .bar.indeterminate {
       width: 35% !important;
       animation: slide 1.4s ease-in-out infinite;
@@ -109,36 +108,9 @@
 
   <script>
     (function () {
-      var bar = document.getElementById('bar');
-      var stage = document.getElementById('stage');
-
-      // 阶段文案映射（与 lib.rs 的 stage 标识一致；未知阶段降级为通用文案）
-      var STAGES = {
-        resolving: '正在定位运行环境…',
-        spawning:  '正在启动后端服务…',
-        waiting:   '正在等待后端就绪…'
-      };
-
-      // 默认进度刻度：与 Rust 侧首档一致，监听器挂载前不至于停留在 0
-      setState(8, '正在初始化…');
-
-      // 有 Tauri 运行时：订阅 Rust 推进的真实进度
-      if (window.__TAURI__ && window.__TAURI__.event) {
-        window.__TAURI__.event.listen('splash-progress', function (e) {
-          var d = e.payload || {};
-          setState(Number(d.percent) || 8, STAGES[d.stage] || d.stage || '正在初始化…');
-        });
-      } else {
-        // 无 Tauri（浏览器直接预览）：进入不确定进度动画
-        bar.classList.add('indeterminate');
-      }
-
-      function setState(percent, text) {
-        bar.classList.remove('indeterminate');
-        var v = Math.max(8, Math.min(100, percent));
-        bar.style.width = v + '%';
-        stage.textContent = text;
-      }
+      // 桌面壳在后端就绪后直接关闭本窗并切主窗，期间没有可订阅的进度源，
+      // 因此统一使用不确定进度动画——不伪造百分比。
+      document.getElementById('bar').classList.add('indeterminate');
     })();
   </script>
 </body>

@@ -141,8 +141,11 @@ langOf(key, fc)  // 扩展名优先 → FileClass 兜底 → 'plain'
 - 独立验证：TipButton.spec.js 存在定时器类 flaky（满载环境偶发），单跑全绿，与本次改动无关。
 
 
-## 第二部分：启动图（Splash）与加载进度方案
-> 目标：缓解 Tauri 桌面壳冷启动阶段（Java 后端 sidecar 拉起前）的无反馈等待，用本地启动图 + 真实进度反馈提升观感。启动图**不依赖后端**，秒显，且进度严格对应真实启动里程碑，不伪造。
+## 第二部分：启动图（Splash）与加载过渡方案
+
+> 目标：缓解桌面壳冷启动阶段（Java 后端 sidecar 拉起前的数秒）无反馈等待，用本地启动图消除「黑屏/白屏空窗」。启动图**不依赖后端**，秒显。
+>
+> 现状（2026-11-02，T04092）：Tauri「路径 B」已剔除，原「Rust 按启动里程碑广播 `splash-progress`、进度条显示真实百分比」的实现随之退役。当前 Electron 壳采用**不确定进度动画**（不伪造百分比），主窗口 `ready-to-show` 后关闭启动图。原 Rust 侧设计保留在 §7 作历史记录。
 
 #### 1. 启动图设计 / 配置
 
@@ -151,52 +154,47 @@ langOf(key, fc)  // 扩展名优先 → FileClass 兜底 → 'plain'
 | 文件 | `webui/public/splash.html`（启动页）+ `webui/public/splash-logo.png`（品牌图，复制自项目根 `bempdiff-logo.png`） |
 | 图片尺寸 | `splash-logo.png` 显示为 128×128，圆角 24px、白色半透明底、柔和阴影 + 轻微呼吸动画 |
 | 图片格式 | PNG（含 Alpha，透明背景，适配深浅背景） |
-| 窗口尺寸 | 440×520，无边框（`decorations(false)`）+ 置顶（`always_on_top(true)`），不可调整 |
-| 展示时长 | 启用到后端就绪为止（一般 1~5s），就绪后立即销毁并亮出主窗口 |
+| 窗口尺寸 | 400×300（`dev-shell/main.js` 的 `SPLASH_SIZE_W/H`），无边框 `frame:false`、`skipTaskbar`、不可调整 |
+| 展示时长 | 启用到主窗口真正显示为止（一般 1~5s）；另有 8s 超时兜底强制收回 |
 
 #### 2. 进度组件实现
 
-- 前台：`splash.html` 内一个圆角进度条（.track/.bar，薄荷绿→淡蓝渐变）＋ 阶段文案（#stage）。
-- 后台事件名：`splash-progress`，负载 `{ stage: string, percent: number }`。
-- 前端通过 `window.__TAURI__.event.listen('splash-progress', ...)` 订阅（`tauri.conf.json` 的 `withGlobalTauri: true` 已保证 `window.__TAURI__` 注入）。
-- 无 Tauri 运行时（浏览器直接预览 splash.html）自动降级为「不确定进度」滑动动画，便于 UI 预览。
-- 刻度钳制在 8~100，监听器挂载前默认 8%「正在初始化…」。
+- `splash.html` 内一个圆角进度条（.track/.bar，薄荷绿→淡蓝渐变）＋ 阶段文案（#stage）。
+- 桌面壳没有向本页推送进度的通道，页面统一使用 `.bar.indeterminate` 滑动动画：**不显示百分比、不伪造进度**。
+- 主窗口显示后才关闭本窗，因此启动图只承担「正在启动」的存在感，不承担进度承诺。
 
-#### 3. 触发逻辑（进度 ↔ 真实阶段映射）
+#### 3. 生命周期（Electron 实现）
 
-源头在 `src-tauri/src/lib.rs` 的 `launch_java()`，经 `splash()` 广播；`wait_for_server()` 提供等待期逐步推进回调。
+- `dev-shell/main.js:createSplashWindow()` 在后端拉起前先建 splash 窗（无边框 + `skipTaskbar`，`ready-to-show` 后居中显示）。
+- 页面来源 `findSplashHtml()`：优先 `dist_input/webui/splash.html`（打包态唯一来源），回退 `webui/dist/splash.html`。
+- 主窗口 `ready-to-show` 或 `did-fail-load` → `closeSplash()`；`createSplashWindow()` 内另挂 8s 定时器兜底，防止后端挂起留下无法关闭的僵尸窗。
+
+#### 4. 接入方式（构建链）
+
+vite build 会把 `webui/public/*` 原样复制到 `webui/dist`，再由 `scripts/build_dist_input.ps1` 镜像到 `dist_input/webui`——**无需额外改构建脚本**。替换品牌图只需覆盖 `webui/public/splash-logo.png`。
+
+#### 5. 效果预览
+
+柔和薄荷青→淡蓝渐变背景，居中 128×128 呼吸 logo +「BempDiff / 差异化对比工具 · 正在启动…」标题、渐变进度条与阶段文案。整个准备工作阶段即出现，消除「黑屏/白屏空窗」；主窗口就绪瞬间过渡到主界面，体验连贯、不突兀。
+
+#### 6. 兼容性与注意事项
+
+- 交付以 Windows 为主，其它平台按工作流手动触发；splash 窗 `skipTaskbar` 仅存续于启动期，不影响主窗口。
+- 进度为不确定动画，不存在「虚报近满」问题（历史 Rust 方案的 8~100 钳制与 76→90 封顶随之退役）。
+- 验证：`splash.html` 为纯静态单页，浏览器直接打开即可预览；打包态由 `dist_input/webui/splash.html` 提供。
+
+#### 7. 历史记录：Tauri 路径 B 的真实进度方案（已于 T04092 退役）
+
+原 `src-tauri/src/lib.rs` 的 `launch_java()` 按阶段调用 `splash(handle, stage, percent)` 广播 `splash-progress`（负载 `{ stage, percent }`），前端 `window.__TAURI__.event.listen` 订阅并驱动百分比：
 
 | stage | percent | 触发时机 |
 | --- | --- | --- |
 | resolving | 10 | 解析随包 JRE / bempdiff.jar / cfr.jar / webroot |
 | spawning | 45 | 资源就绪，即将 `spawn` Java 子进程 |
-| waiting | 76 → 90 | `wait_for_server` TCP 探活期间，每 ~0.2s +1，封顶 90（反映真实等待时长，不伪造单调递增） |
-| ready | 100 | 后端端口监听成功；随后在主线程销毁 splash 窗口、`show()` 主窗口 |
+| waiting | 76 → 90 | `wait_for_server` TCP 探活期间每 ~0.2s +1，封顶 90 |
+| ready | 100 | 后端端口监听成功；主线程销毁 splash、`show()` 主窗口 |
 
-失败分支：同样推进到 100 并 `show()` 主窗口（由前端既有的连接自愈重连兜底），错误细节记入 `%TEMP%/bempdiff-rust.log`。
-
-#### 4. 接入方式（集成步骤）
-
-已在 `src-tauri/src/lib.rs` 落地，开发态（`cfg(debug_assertions)`）不受影响：
-
-1. 生产态 setup 中**先**创建「splash」窗口（`WebviewUrl::App("splash.html")`，指向被嵌入二进制的 `dist_input/webui/splash.html`），再创建「main」主窗口但设 `visible(false)`。
-   - 两个窗口都必须在**主线程（setup 内）**创建，否则 Windows 上可能无窗口/闪退（沿用既有架构约定）。
-2. 后台线程 `launch_java()` 按真实阶段调用 `splash(handle, stage, percent)` 广播进度。
-3. `launch_java()` 返回后，用 `handle.run_on_main_thread(|| { destroy splash; show main; })` 切窗（窗口操作必须回主线程）。
-
-构建链：vite build 会把 `webui/public/*` 原样复制到 `webui/dist`，再由 `build_tauri_app.ps1` 镜像到 `dist_input/webui`，Tauri 以 `frontendDist` 嵌入——**无需额外改构建脚本**。替换品牌图只需覆盖 `webui/public/splash-logo.png`。
-
-#### 5. 效果预览
-
-柔和薄荷青→淡蓝渐变背景，居中 128×128 呼吸 logo +「BempDiff / 差异化对比工具 · 正在启动…」标题、渐变进度条与阶段文案。整个准备工作阶段即出现，消除「黑屏/白屏空窗」；进度随真实里程碑推进，后端就绪瞬间过渡到主界面，体验连贯、不突兀。
-
-#### 6. 兼容性与注意事项
-
-- **纯 Windows 目标**（本应用仅发布 Windows，WebView2 运行时 + Tauri 2）。
-- `withGlobalTauri: true` 为事件注入前提，切勿删除。
-- splash 窗口 `always_on_top` 仅存续于启动期，就绪即销毁，不影响主窗口后续。
-- 进度钳制 8~100 且等待期做了封顶（76→90 停），避免「虚报近满」——最终 100 仅由真实就绪触发。
-- 验证：`cargo check --manifest-path src-tauri/Cargo.toml` 通过（exit 0）；`dead_code` 警告来自 debug 下 `#[cfg(not(debug_assertions))]` 生产代码被排除，release 构建会自动消除，非本次回归。桌面端真机验证需在用户本机 `npm run tauri build` 后运行安装包。
+该方案要求 `tauri.conf.json` 的 `withGlobalTauri: true`，并需本机 `cargo tauri build` 冒烟；随路径 B 代码一并删除，无遗留依赖。
 
 ## 第三部分：按钮图标优化（去边框扁平风格）
 > 任务：整体按钮图标视觉优化，去除描边边框，扁平化、简约化，统一一致性。

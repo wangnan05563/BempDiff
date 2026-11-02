@@ -1,5 +1,5 @@
 // BempDiff 后端 `server` 子命令的极简 fetch 封装。
-// 后端绑定 127.0.0.1，同源（dev 经 vite proxy，生产经 Tauri sidecar 同源托管）免 CORS。
+// 后端绑定 127.0.0.1，同源（dev 经 vite proxy，生产经桌面壳 sidecar 同源托管）免 CORS。
 const BASE = ''
 
 async function req(method, path, body, opts = {}) {

@@ -116,7 +116,7 @@ jobs:
         run: |
           # SkipJre：真实编译 jar + 刷新 webui 镜像，绝不重新 jlink dist_input/jre
           powershell -NoProfile -ExecutionPolicy Bypass `
-            -File scripts\build_tauri_app.ps1 -AssembleOnly -SkipJre
+            -File scripts\build_dist_input.ps1 -SkipJre
           if ($LASTEXITCODE -ne 0) { throw "assemble failed（见 bempdiff\build_native.log）" }
 
       # 确认 jre 仍是 arm64（若被覆盖，此处会失败——早发现早停）

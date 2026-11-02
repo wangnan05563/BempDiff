@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { state, triggerCompare, generateReport, downloadExport, runAiClassify, toast, applyTheme, cycleTheme, loadHlTheme, ingestShellPaths, inferType, startAiAnalysis, aiAnyRunning, isUnpacking, openExports, loadCompareHistory, restoreCompareHistory, removeCompareHistory, clearCompareHistory, loadSavedSessions, saveNamedSession, applyNamedSession, removeNamedSession } from '../store'
-import { isTauri, isElectron, pickPath } from '../lib/tauri'
+import { isElectron, pickPath } from '../lib/desktop-bridge'
 import { ACCENTS, loadAccentKey, applyAccent } from '../lib/accents'
 import { i18n, LOCALES, setLocale, t } from '../lib/i18n'
 import PathBreadcrumb from './PathBreadcrumb.vue'
@@ -230,7 +230,7 @@ function onPickAccent(key) {
 const aiBusy = computed(() => aiAnyRunning())
 const unpacking = computed(() => isUnpacking())
 
-// 桌面壳（Electron / Tauri）：原生对话框直接拿绝对路径（免上传）；浏览器模式：提示手动输入服务器本机绝对路径。
+// 桌面壳（Electron）：原生对话框直接拿绝对路径（免上传）；浏览器模式：提示手动输入服务器本机绝对路径。
 async function browse(which) {
   const sel = await pickPath({ directory: state.leftType === 'folder' })
   if (sel) {
@@ -238,7 +238,7 @@ async function browse(which) {
     assignPath(which, Array.isArray(sel) ? sel[0] : sel)
     return
   }
-  if (!isTauri() && !isElectron()) {
+  if (!isElectron()) {
     toast('info', t('tb.browserHint'))
   }
 }

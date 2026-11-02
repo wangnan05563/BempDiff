@@ -334,7 +334,7 @@ async function startBackend() {
   // 会被解析为“-Xmx 缺值”而报 Invalid maximum heap size: -Xmx，导致后端启动即失败。
   // 显式 2g：默认堆=物理内存 1/4，小内存机器上解包/反编译易 OOM；给 256MB 单条目 + CFR + 扁平化叶子留足余量。
   const args = ['-Xmx2g', '-cp', classPath, 'com.bempdiff.Main', 'server', '--port', String(PORT)]
-  // webroot 与 Tauri 统一：优先 dist_input/webui（assemble 镜像的产物），回退 webui/dist（仅前端源码直接构建）。
+  // webroot 统一：优先 dist_input/webui（assemble 镜像的产物），回退 webui/dist（仅前端源码直接构建）。
   // 打包态 extraResources 只包含 dist_input/webui，故这里按相对 ROOT 的多候选查找。
   const webrootCandidates = [
     path.join('bempdiff', 'dist_input', 'webui'),
@@ -417,9 +417,9 @@ function computeSize() {
 
 // ---------- 启动图（splash）过渡 ----------
 // 后端 sidecar 启动可能耗时数秒——这段时间若直接黑屏等待，用户会觉得"没反应 / 打不开"。
-// 参照 Tauri 版启动图方案：先弹出一个只含品牌 logo + 进度条的轻量窗口，后端就绪、主窗口
+// 先弹出一个只含品牌 logo + 进度条的轻量窗口，后端就绪、主窗口
 // ready-to-show 后再关闭 splash。splash.html 为自包含单页（相对路径引用 ./splash-logo.png），
-// 支持 loadFile 本地加载，无 Tauri 运行时自动降级为不确定进度动画，故 Electron 无需改其脚本。
+// loadFile 本地加载即自带不确定进度动画，无需任何后端或桥接支持。
 let splashWin = null
 let SPLASH_SIZE_W = 400
 let SPLASH_SIZE_H = 300

@@ -2,8 +2,8 @@
 // 设计原则：
 //   - 渲染进程只能通过 contextBridge 拿到受控 API（sandbox + contextIsolation）。
 //   - 不暴露 ipcRenderer 自身，避免渲染进程误用任意 channel。
-//   - 与 webui/src/lib/tauri.js 的 pickPath(opts) 签名保持一致，
-//     前端无需关心是 Electron 还是 Tauri 环境。
+//   - 与 webui/src/lib/desktop-bridge.js 的 pickPath(opts) 签名保持一致，
+//     前端只认这一套桥，浏览器态无桥则降级为手动输入。
 
 const { contextBridge, ipcRenderer } = require('electron')
 
