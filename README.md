@@ -145,7 +145,7 @@ BempDiff 把这件事变成一次拖拽：自动逐层解包 → 按业务重要
 | Linux arm64 | `BempDiff-<version>-arm64.AppImage` / `.deb` | 由 [`build-arm64-unix.yml`](.github/workflows/build-arm64-unix.yml) 按需构建（`workflow_dispatch`） |
 | macOS arm64 | `BempDiff-<version>-arm64.dmg` | 同一工作流构建，**未签名**——首次打开需右键 → 打开 |
 
-安装包内嵌瘦身 JRE，无需额外安装 Java。桌面安装包面向 Windows 10 / 11；Linux / macOS 可用 `server` 子命令拉起本地 Web 服务，浏览器访问同一套界面。构建细节见 [`docs/构建手册-环境补齐与EXE打包.md`](docs/构建手册-环境补齐与EXE打包.md)。
+安装包内嵌瘦身 JRE，无需额外安装 Java。桌面安装包面向 Windows 10 / 11；Linux / macOS 可用 `server` 子命令拉起本地 Web 服务，浏览器访问同一套界面。构建细节见 [`bempdiff/README.md` 开发章节](bempdiff/README.md#开发)。
 
 ---
 
@@ -205,7 +205,7 @@ java -cp dist_input/classes com.bempdiff.Main <子命令> ...
 - **比对**：内部包前缀（L1 展开规则）、忽略规则、嵌套解包深度与线程数、空白 / 注释归一化。
 - **AI**：服务商、Base URL、模型、API Key（掩码显示，默认不落盘）、代理、成本闸门阈值、单次输入 / 输出 token 上限、连接测试。
 - **界面**：明暗主题、强调色、语法高亮主题、语言（中 / 英）、差异树过滤、启动图。
-- **更新检查**：**关于 → 检查更新**读取 GitHub 最新 Release（默认仓库 `wangnan05563/bempDiff`，可用 `BEMPDIFF_GITHUB_REPO` 覆盖；私有仓库或触发匿名限流时，可在关于页填 GitHub 令牌或设 `GITHUB_TOKEN`），详见 [`docs/GitHub更新-人工操作手册.md`](docs/GitHub更新-人工操作手册.md)。
+- **更新检查**：**关于 → 检查更新**读取 GitHub 最新 Release（默认仓库 `wangnan05563/bempDiff`，可用 `BEMPDIFF_GITHUB_REPO` 覆盖；私有仓库或触发匿名限流时，可在关于页填 GitHub 令牌或设 `GITHUB_TOKEN`），详见 [`docs/GitHub更新手册.md`](docs/GitHub更新手册.md)。
 
 客户端偏好（忽略规则、语言、已审阅标记）存在浏览器 `localStorage`，不出本机。
 
@@ -229,6 +229,8 @@ java -cp dist_input/classes com.bempdiff.Main <子命令> ...
 sidecar 监听 `127.0.0.1:18765`，同时托管构建后的 SPA 与桌面壳调用的 REST 接口：
 
 `/api/session/compare` · `/api/entry` · `/api/file` · `/api/job` · `/api/export` · `/api/config` · `/api/ai/context` · `/api/ai/models` · `/api/ai/test` · `/api/tasks/running` · `/api/update/check` · `/api/admin/diag-bundle` · `/api/admin/cleanup`
+
+> 完整的系统架构设计（总体架构图、模块职责、数据流、技术选型、部署拓扑）见 **[`docs/系统架构设计.md`](docs/系统架构设计.md)**。
 
 设计文档（接口契约、分层方案、UX 对标、性能报告）见 [`docs/`](docs/)。
 
@@ -286,7 +288,7 @@ java  -cp "out_test;toolchain/lib/*;dist_input/classes;cfr.jar" \
 
 已交付（优化 PRD 的 M1–M3）：行内字符级高亮、未变更区折叠、三态主题、CLI/CI 模式、AST 对齐 diff、API 兼容性分级、可配置忽略规则、HTML/MD/JSON 导出、会话重放、脱敏诊断包、影响面分析、成本透明、语法高亮主题包、gutter 操作。
 
-下一批候选（P2 规划池，详见 [`docs/PRD-优化需求全景-基于GitHub同款调研.md`](docs/PRD-优化需求全景-基于GitHub同款调研.md)）：
+下一批候选（P2 规划池，详见 [`docs/PRD-产品优化需求全景.md`](docs/PRD-产品优化需求全景.md)）：
 
 1. 归档格式扩展——RAR / 7z / ISO 与磁盘镜像免解压直比。
 2. 远程对比源——Maven Central 直接拉 artifact、FTP/SFTP/S3。

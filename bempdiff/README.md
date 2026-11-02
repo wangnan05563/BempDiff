@@ -49,7 +49,7 @@ BempDiff 面向「生产版本 vs 下发版本」的发布前比对场景：把�
 ## 安装
 
 从 [Releases](https://github.com/wangnan05563/bempDiff/releases) 下载对应平台安装包（Windows 为 `BempDiff-<版本>-setup.exe`，NSIS 安装包，内嵌瘦 JRE，无需装 Java），双击安装即可。
-arm64 / Linux / macOS 产物由 `.github/workflows/` 下的工作流按需构建（`workflow_dispatch`），macOS 包未签名，首次打开需右键 → 打开。构建细节见 [`../docs/构建手册-环境补齐与EXE打包.md`](../docs/构建手册-环境补齐与EXE打包.md)。
+arm64 / Linux / macOS 产物由 `.github/workflows/` 下的工作流按需构建（`workflow_dispatch`），macOS 包未签名，首次打开需右键 → 打开。构建细节见本文「[开发](#开发)」章节。
 
 ## 快速开始
 
@@ -97,7 +97,7 @@ BempDiff.exe ci --left <old> --right <new> [--report <md>] [--json <out.json>]
 - **对比选项**（⚙ 配置中心）：内部包前缀（L1 展开规则）、Top-K、忽略空白/注释/正则/扩展名、嵌套解包线程数与深度
 - **AI**：厂商（OpenAI 兼容/Azure/Ollama/通义等）、BaseURL、API Key（掩码显示，默认不落盘）、模型、连接测试、代理、成本闸门阈值、单次输入/输出 token 上限
 - **界面**：明暗主题、强调色、语法高亮主题、语言（中/英）、差异树过滤、启动图
-- **更新检查**：「关于 → 检查更新」读取 GitHub 最新 Release（默认仓库 `wangnan05563/bempDiff`，可用 `BEMPDIFF_GITHUB_REPO` 覆盖；私有仓库或限流时可在关于页填 GitHub 令牌，或用环境变量 `GITHUB_TOKEN`），详见 [`../docs/GitHub更新-人工操作手册.md`](../docs/GitHub更新-人工操作手册.md)
+- **更新检查**：「关于 → 检查更新」读取 GitHub 最新 Release（默认仓库 `wangnan05563/bempDiff`，可用 `BEMPDIFF_GITHUB_REPO` 覆盖；私有仓库或限流时可在关于页填 GitHub 令牌，或用环境变量 `GITHUB_TOKEN`），详见 [`../docs/GitHub更新手册.md`](../docs/GitHub更新手册.md)
 
 ## 开发
 
