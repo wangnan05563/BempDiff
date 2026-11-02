@@ -51,7 +51,6 @@ garbage_patterns:
   compiled_dirs:
     - "out_test/"
     - "out_test_ui/"
-    - "bempdiff/src-tauri/target/"     # 显式限定，避免裸 `target/` 命中其它同名目录
   # SonarQube 缓存目录
   cache_dirs:
     - ".scannerwork/"
