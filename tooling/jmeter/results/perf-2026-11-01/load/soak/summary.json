@@ -1,0 +1,115 @@
+{
+  "runs": [
+    {
+      "plan": "soak:server_read",
+      "threads": 4,
+      "rc": 0,
+      "wall": 6589.3,
+      "summary": {
+        "requests": 13080718,
+        "errors": 0,
+        "error_rate": 0.0,
+        "tps": 1985.15,
+        "p50_ms": null,
+        "p90_ms": null,
+        "p95_ms": null,
+        "p99_ms": 70,
+        "avg_ms": null,
+        "max_ms": null,
+        "labels": {}
+      }
+    },
+    {
+      "plan": "soak:harness",
+      "threads": 4,
+      "rc": 0,
+      "wall": 3913.7,
+      "summary": {
+        "requests": 429268,
+        "errors": 0,
+        "error_rate": 0.0,
+        "tps": 109.68,
+        "p50_ms": null,
+        "p90_ms": null,
+        "p95_ms": null,
+        "p99_ms": 1609,
+        "avg_ms": null,
+        "max_ms": null,
+        "labels": {}
+      }
+    },
+    {
+      "plan": "soak:write",
+      "threads": 4,
+      "rc": 0,
+      "wall": 2394.7,
+      "summary": {
+        "requests": 1929,
+        "errors": 0,
+        "error_rate": 0.0,
+        "tps": 0.81,
+        "p50_ms": null,
+        "p90_ms": null,
+        "p95_ms": null,
+        "p99_ms": 1646,
+        "avg_ms": null,
+        "max_ms": null,
+        "labels": {}
+      }
+    }
+  ],
+  "resources": {
+    "server": {
+      "samples": 7063,
+      "rss_max_mb": 445.0,
+      "rss_avg_mb": 418.6,
+      "private_max_mb": 650.4,
+      "cpu_avg_pct": 61.2,
+      "cpu_max_pct": 298.3,
+      "threads_max": 0,
+      "handles_max": 417
+    },
+    "harness": {
+      "samples": 7062,
+      "rss_max_mb": 402.8,
+      "rss_avg_mb": 382.0,
+      "private_max_mb": 646.3,
+      "cpu_avg_pct": 35.7,
+      "cpu_max_pct": 328.2,
+      "threads_max": 0,
+      "handles_max": 536
+    },
+    "jvm_probe": {
+      "server": {
+        "samples": 947,
+        "span_hours": 3.98,
+        "threads_first": 26,
+        "threads_last": 30,
+        "threads_max": 41,
+        "handles_first": 334,
+        "handles_last": 369,
+        "handles_max": 416,
+        "rss_first_mb": 58.3,
+        "rss_last_mb": 444.6,
+        "rss_max_mb": 445.0,
+        "rss_growth_mb_per_hour": 97.0,
+        "threads_growth_per_hour": 1.0
+      },
+      "harness": {
+        "samples": 947,
+        "span_hours": 3.98,
+        "threads_first": 26,
+        "threads_last": 60,
+        "threads_max": 62,
+        "handles_first": 324,
+        "handles_last": 533,
+        "handles_max": 538,
+        "rss_first_mb": 52.6,
+        "rss_last_mb": 402.0,
+        "rss_max_mb": 402.0,
+        "rss_growth_mb_per_hour": 87.7,
+        "threads_growth_per_hour": 8.54
+      }
+    }
+  }
+}

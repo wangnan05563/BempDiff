@@ -1,0 +1,566 @@
+{
+  "runs": [
+    {
+      "plan": "srv_mutate",
+      "threads": 1,
+      "rc": 0,
+      "wall": 69.70887279510498,
+      "jtl": "D:\\code\\otherProjects\\18_comparePakage\\tooling\\jmeter\\results\\perf-2026-11-01\\load\\supplement\\srv_mutate-t1.jtl.gz",
+      "jtl_scratch": "E:/qoder-perf/jtl\\supplement\\srv_mutate-t1.jtl",
+      "summary": {
+        "requests": 150963,
+        "errors": 0,
+        "error_rate": 0.0,
+        "tps": 2524.93,
+        "span_sec": 59.8,
+        "p50_ms": 0,
+        "p90_ms": 1,
+        "p95_ms": 1,
+        "p99_ms": 2,
+        "avg_ms": 0.4,
+        "max_ms": 107,
+        "labels": {
+          "M ai context GET": {
+            "n": 30192,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 504.98,
+            "avg_ms": 0.7,
+            "p50_ms": 1,
+            "p90_ms": 1,
+            "p95_ms": 2,
+            "p99_ms": 4,
+            "max_ms": 82,
+            "codes": {
+              "200": 30192
+            },
+            "kbps": 454.7
+          },
+          "M export alias": {
+            "n": 30192,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 504.98,
+            "avg_ms": 0.2,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 1,
+            "max_ms": 22,
+            "codes": {
+              "200": 30192
+            },
+            "kbps": 267.3
+          },
+          "M file copy l2r(DELETED)": {
+            "n": 30193,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 504.99,
+            "avg_ms": 0.3,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 2,
+            "max_ms": 44,
+            "codes": {
+              "200": 30193
+            },
+            "kbps": 215.5
+          },
+          "M file copy r2l(ADDED)": {
+            "n": 30193,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 504.99,
+            "avg_ms": 0.3,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 2,
+            "max_ms": 107,
+            "codes": {
+              "200": 30193
+            },
+            "kbps": 218.0
+          },
+          "M job cancel": {
+            "n": 30193,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 504.99,
+            "avg_ms": 0.2,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 1,
+            "max_ms": 20,
+            "codes": {
+              "200": 30193
+            },
+            "kbps": 150.9
+          }
+        },
+        "note": null,
+        "rc": 0,
+        "wall_sec": 69.7
+      }
+    },
+    {
+      "plan": "srv_mutate",
+      "threads": 2,
+      "rc": 0,
+      "wall": 70.17567825317383,
+      "jtl": "D:\\code\\otherProjects\\18_comparePakage\\tooling\\jmeter\\results\\perf-2026-11-01\\load\\supplement\\srv_mutate-t2.jtl.gz",
+      "jtl_scratch": "E:/qoder-perf/jtl\\supplement\\srv_mutate-t2.jtl",
+      "summary": {
+        "requests": 202405,
+        "errors": 0,
+        "error_rate": 0.0,
+        "tps": 3393.55,
+        "span_sec": 59.6,
+        "p50_ms": 0,
+        "p90_ms": 1,
+        "p95_ms": 2,
+        "p99_ms": 4,
+        "avg_ms": 0.5,
+        "max_ms": 135,
+        "labels": {
+          "M ai context GET": {
+            "n": 40481,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 678.71,
+            "avg_ms": 1.3,
+            "p50_ms": 1,
+            "p90_ms": 2,
+            "p95_ms": 4,
+            "p99_ms": 9,
+            "max_ms": 100,
+            "codes": {
+              "200": 40481
+            },
+            "kbps": 611.1
+          },
+          "M export alias": {
+            "n": 40481,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 678.71,
+            "avg_ms": 0.3,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 2,
+            "max_ms": 19,
+            "codes": {
+              "200": 40481
+            },
+            "kbps": 359.2
+          },
+          "M file copy l2r(DELETED)": {
+            "n": 40481,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 678.71,
+            "avg_ms": 0.4,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 2,
+            "max_ms": 20,
+            "codes": {
+              "200": 40481
+            },
+            "kbps": 289.6
+          },
+          "M file copy r2l(ADDED)": {
+            "n": 40481,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 678.71,
+            "avg_ms": 0.4,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 3,
+            "max_ms": 135,
+            "codes": {
+              "200": 40481
+            },
+            "kbps": 293.0
+          },
+          "M job cancel": {
+            "n": 40481,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 678.71,
+            "avg_ms": 0.3,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 2,
+            "max_ms": 36,
+            "codes": {
+              "200": 40481
+            },
+            "kbps": 202.8
+          }
+        },
+        "note": null,
+        "rc": 0,
+        "wall_sec": 70.2
+      }
+    },
+    {
+      "plan": "srv_mutate",
+      "threads": 4,
+      "rc": 0,
+      "wall": 68.36995148658752,
+      "jtl": "D:\\code\\otherProjects\\18_comparePakage\\tooling\\jmeter\\results\\perf-2026-11-01\\load\\supplement\\srv_mutate-t4.jtl.gz",
+      "jtl_scratch": "E:/qoder-perf/jtl\\supplement\\srv_mutate-t4.jtl",
+      "summary": {
+        "requests": 413123,
+        "errors": 0,
+        "error_rate": 0.0,
+        "tps": 6910.84,
+        "span_sec": 59.8,
+        "p50_ms": 0,
+        "p90_ms": 1,
+        "p95_ms": 1,
+        "p99_ms": 4,
+        "avg_ms": 0.5,
+        "max_ms": 121,
+        "labels": {
+          "M ai context GET": {
+            "n": 82623,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 1382.14,
+            "avg_ms": 1.4,
+            "p50_ms": 1,
+            "p90_ms": 2,
+            "p95_ms": 3,
+            "p99_ms": 9,
+            "max_ms": 121,
+            "codes": {
+              "200": 82623
+            },
+            "kbps": 1244.5
+          },
+          "M export alias": {
+            "n": 82625,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 1382.17,
+            "avg_ms": 0.3,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 1,
+            "max_ms": 32,
+            "codes": {
+              "200": 82625
+            },
+            "kbps": 731.6
+          },
+          "M file copy l2r(DELETED)": {
+            "n": 82625,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 1382.17,
+            "avg_ms": 0.3,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 1,
+            "max_ms": 32,
+            "codes": {
+              "200": 82625
+            },
+            "kbps": 589.9
+          },
+          "M file copy r2l(ADDED)": {
+            "n": 82625,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 1382.17,
+            "avg_ms": 0.4,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 2,
+            "max_ms": 65,
+            "codes": {
+              "200": 82625
+            },
+            "kbps": 596.6
+          },
+          "M job cancel": {
+            "n": 82625,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 1382.17,
+            "avg_ms": 0.3,
+            "p50_ms": 0,
+            "p90_ms": 1,
+            "p95_ms": 1,
+            "p99_ms": 1,
+            "max_ms": 32,
+            "codes": {
+              "200": 82625
+            },
+            "kbps": 413.0
+          }
+        },
+        "note": null,
+        "rc": 0,
+        "wall_sec": 68.4
+      }
+    },
+    {
+      "plan": "srv_export_rec_loops6",
+      "threads": 1,
+      "rc": 0,
+      "wall": 64.8009467124939,
+      "jtl": "D:\\code\\otherProjects\\18_comparePakage\\tooling\\jmeter\\results\\perf-2026-11-01\\load\\supplement\\srv_export_rec-t1-loops6.jtl.gz",
+      "jtl_scratch": "E:/qoder-perf/jtl\\supplement\\srv_export_rec-t1-loops6.jtl",
+      "summary": {
+        "requests": 12,
+        "errors": 0,
+        "error_rate": 0.0,
+        "tps": 0.23,
+        "span_sec": 53.2,
+        "p50_ms": 100,
+        "p90_ms": 4834,
+        "p95_ms": 6079,
+        "p99_ms": 6079,
+        "avg_ms": 1920.0,
+        "max_ms": 6079,
+        "labels": {
+          "X export detail": {
+            "n": 6,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 0.11,
+            "avg_ms": 21.5,
+            "p50_ms": 2,
+            "p90_ms": 100,
+            "p95_ms": 100,
+            "p99_ms": 100,
+            "max_ms": 100,
+            "codes": {
+              "200": 6
+            },
+            "kbps": 0.1
+          },
+          "X export download": {
+            "n": 6,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 0.11,
+            "avg_ms": 3818.5,
+            "p50_ms": 2913,
+            "p90_ms": 6079,
+            "p95_ms": 6079,
+            "p99_ms": 6079,
+            "max_ms": 6079,
+            "codes": {
+              "200": 6
+            },
+            "kbps": 30052.1
+          }
+        },
+        "note": null,
+        "rc": 0,
+        "wall_sec": 64.8
+      }
+    },
+    {
+      "plan": "srv_export_rec_loops1",
+      "threads": 1,
+      "rc": 0,
+      "wall": 39.512569189071655,
+      "jtl": "D:\\code\\otherProjects\\18_comparePakage\\tooling\\jmeter\\results\\perf-2026-11-01\\load\\supplement\\srv_export_rec-t1-loops1.jtl.gz",
+      "jtl_scratch": "E:/qoder-perf/jtl\\supplement\\srv_export_rec-t1-loops1.jtl",
+      "summary": {
+        "requests": 2,
+        "errors": 0,
+        "error_rate": 0.0,
+        "tps": 0.19,
+        "span_sec": 10.7,
+        "p50_ms": 219,
+        "p90_ms": 5502,
+        "p95_ms": 5502,
+        "p99_ms": 5502,
+        "avg_ms": 2860.5,
+        "max_ms": 5502,
+        "labels": {
+          "X export detail": {
+            "n": 1,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 0.09,
+            "avg_ms": 219.0,
+            "p50_ms": 219,
+            "p90_ms": 219,
+            "p95_ms": 219,
+            "p99_ms": 219,
+            "max_ms": 219,
+            "codes": {
+              "200": 1
+            },
+            "kbps": 0.0
+          },
+          "X export download": {
+            "n": 1,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 0.09,
+            "avg_ms": 5502.0,
+            "p50_ms": 5502,
+            "p90_ms": 5502,
+            "p95_ms": 5502,
+            "p99_ms": 5502,
+            "max_ms": 5502,
+            "codes": {
+              "200": 1
+            },
+            "kbps": 24824.9
+          }
+        },
+        "note": null,
+        "rc": 0,
+        "wall_sec": 39.5
+      }
+    },
+    {
+      "plan": "srv_mutate_once",
+      "threads": 1,
+      "rc": 0,
+      "wall": 56.02871561050415,
+      "jtl": "D:\\code\\otherProjects\\18_comparePakage\\tooling\\jmeter\\results\\perf-2026-11-01\\load\\supplement\\srv_mutate_once-t1.jtl.gz",
+      "jtl_scratch": "E:/qoder-perf/jtl\\supplement\\srv_mutate_once-t1.jtl",
+      "summary": {
+        "requests": 5,
+        "errors": 0,
+        "error_rate": 0.0,
+        "tps": 0.22,
+        "span_sec": 22.3,
+        "p50_ms": 154,
+        "p90_ms": 1486,
+        "p95_ms": 1486,
+        "p99_ms": 1486,
+        "avg_ms": 453.8,
+        "max_ms": 1486,
+        "labels": {
+          "O ai context POST": {
+            "n": 1,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 0.04,
+            "avg_ms": 154.0,
+            "p50_ms": 154,
+            "p90_ms": 154,
+            "p95_ms": 154,
+            "p99_ms": 154,
+            "max_ms": 154,
+            "codes": {
+              "200": 1
+            },
+            "kbps": 0.0
+          },
+          "O export delete": {
+            "n": 1,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 0.04,
+            "avg_ms": 139.0,
+            "p50_ms": 139,
+            "p90_ms": 139,
+            "p95_ms": 139,
+            "p99_ms": 139,
+            "max_ms": 139,
+            "codes": {
+              "200": 1
+            },
+            "kbps": 0.0
+          },
+          "O file delete": {
+            "n": 1,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 0.04,
+            "avg_ms": 31.0,
+            "p50_ms": 31,
+            "p90_ms": 31,
+            "p95_ms": 31,
+            "p99_ms": 31,
+            "max_ms": 31,
+            "codes": {
+              "200": 1
+            },
+            "kbps": 0.0
+          },
+          "O file rename": {
+            "n": 1,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 0.04,
+            "avg_ms": 459.0,
+            "p50_ms": 459,
+            "p90_ms": 459,
+            "p95_ms": 459,
+            "p99_ms": 459,
+            "max_ms": 459,
+            "codes": {
+              "200": 1
+            },
+            "kbps": 0.0
+          },
+          "O update check": {
+            "n": 1,
+            "err": 0,
+            "err_rate": 0.0,
+            "tps": 0.04,
+            "avg_ms": 1486.0,
+            "p50_ms": 1486,
+            "p90_ms": 1486,
+            "p95_ms": 1486,
+            "p99_ms": 1486,
+            "max_ms": 1486,
+            "codes": {
+              "200": 1
+            },
+            "kbps": 0.0
+          }
+        },
+        "note": null,
+        "rc": 0,
+        "wall_sec": 56.0
+      }
+    }
+  ],
+  "resources": {
+    "server": {
+      "samples": 225,
+      "rss_max_mb": 2966.8,
+      "rss_avg_mb": 2966.3,
+      "private_max_mb": 3006.7,
+      "cpu_avg_pct": 52.8,
+      "cpu_max_pct": 223.5,
+      "threads_max": 0,
+      "handles_max": 491
+    },
+    "harness": {
+      "samples": 225,
+      "rss_max_mb": 762.1,
+      "rss_avg_mb": 762.1,
+      "private_max_mb": 792.4,
+      "cpu_avg_pct": 0.0,
+      "cpu_max_pct": 1.6,
+      "threads_max": 0,
+      "handles_max": 527
+    }
+  }
+}

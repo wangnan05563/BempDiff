@@ -1,0 +1,26 @@
+{
+ "ts": "2026-11-01T22:53:01",
+ "base": "E:/qoder-perf/env/home/server/.bempdiff",
+ "subs": {
+  "ai-context-cache": {
+   "files": 1,
+   "bytes": 775
+  },
+  "bempdiff-web.properties": {
+   "files": 1,
+   "bytes": 938
+  },
+  "exports": {
+   "files": 14,
+   "bytes": 545504472
+  },
+  "runtime": {
+   "files": 0,
+   "bytes": 0
+  }
+ },
+ "total": [
+  16,
+  545506185
+ ]
+}

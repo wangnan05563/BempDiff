@@ -1,0 +1,35 @@
+== A. 整文件 读+SHA-256 vs 只读（buf 扫描）
+round=0 buf=  8192 read+sha=  2158ms read-only=   383ms
+round=0 buf= 65536 read+sha=   728ms read-only=    96ms
+round=0 buf=262144 read+sha=   531ms read-only=   102ms
+round=1 buf=  8192 read+sha=   868ms read-only=   442ms
+round=1 buf= 65536 read+sha=   642ms read-only=   107ms
+round=1 buf=262144 read+sha=   582ms read-only=   134ms
+round=2 buf=  8192 read+sha=   704ms read-only=   312ms
+round=2 buf= 65536 read+sha=   540ms read-only=    90ms
+round=2 buf=262144 read+sha=   488ms read-only=    89ms
+== B. 条目级：现网写法（每条目 getInstance + new byte[8192]）
+        entries=36841 bytes=2357824
+round=0 variant=fresh        2022ms
+        entries=36841 bytes=209722184
+round=0 variant=bufreused    1316ms
+        entries=36841 bytes=209722184
+round=0 variant=clone        1713ms
+        entries=36841 bytes=431153152
+round=0 variant=traverse     1008ms
+        entries=36841 bytes=2357824
+round=1 variant=fresh        1653ms
+        entries=36841 bytes=209722184
+round=1 variant=bufreused    1626ms
+        entries=36841 bytes=209722184
+round=1 variant=clone        1802ms
+        entries=36841 bytes=431153152
+round=1 variant=traverse     1196ms
+        entries=36841 bytes=2357824
+round=2 variant=fresh        1641ms
+        entries=36841 bytes=209722184
+round=2 variant=bufreused    1413ms
+        entries=36841 bytes=209722184
+round=2 variant=clone        1294ms
+        entries=36841 bytes=431153152
+round=2 variant=traverse      926ms

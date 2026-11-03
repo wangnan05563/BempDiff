@@ -1,0 +1,74 @@
+# ============================================================================
+# BempDiff 性能测试环境（2026-11-01 全 API 轮）
+# 所有路径相对项目根目录；端口三分隔离，绝不触碰生产 18765 / 压测 Harness 18080 的既有约定。
+#   server(产品真实 API) = 18090
+#   harness(test-only 核心适配层) = 18080
+#   mock_ai(本地 OpenAI 兼容上游) = 18091
+# 隔离手段：每个 JVM 独立 -Duser.home 与 -Djava.io.tmpdir，压测写入不落真实用户配置。
+# ============================================================================
+
+env_root: "E:/qoder-perf/env"
+jtl_root: "tooling/jmeter/results/perf-2026-11-01"
+# JTL / 监控 CSV 等大块写入落 E: 盘（D: 已 100% 满，见 2026-11-01 环境记录）；
+# 结果归档后压缩回 jtl_root，交付物仍在仓库内可追溯。
+jtl_scratch: "E:/qoder-perf/jtl"
+report_root: "docs"
+
+java_exe: "bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64/bin/java.exe"
+javac_exe: "bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64/bin/javac.exe"
+jmeter_jar: "D:/code/Jmeter/apache-jmeter-5.6.3/bin/ApacheJMeter.jar"
+python_exe: "python"
+
+server:
+  port: 18090
+  java_exe: "bempdiff/dist_input/jre/bin/java.exe"   # app.jar 以 JDK25(class 69) 构建，须用打包 JRE 启动
+  app_jar: "bempdiff/dist_input/app/bempdiff.jar"
+  app_lib: "bempdiff/dist_input/app/lib"
+  cfr_jar: "bempdiff/dist_input/app/cfr.jar"
+  webroot: "bempdiff/webui/dist"
+  user_home: "E:/qoder-perf/env/home/server"
+  tmp_dir: "E:/qoder-perf/env/tmp/server"
+  jvm_args: ["-Xms512m", "-Xmx3g", "-XX:+UseG1GC", "-XX:+HeapDumpOnOutOfMemoryError", "-Dfile.encoding=UTF-8"]
+
+harness:
+  port: 18080
+  classes_core: "E:/qoder-perf/env/classes/core"
+  classes_harness: "E:/qoder-perf/env/classes/harness"
+  cfr_jar: "bempdiff/cfr.jar"
+  dep_lib: "bempdiff/toolchain/lib"
+  user_home: "E:/qoder-perf/env/home/harness"
+  tmp_dir: "E:/qoder-perf/env/tmp/harness"
+  jvm_args: ["-Xms512m", "-Xmx3g", "-XX:+UseG1GC", "-Dfile.encoding=UTF-8"]
+
+mock_ai:
+  port: 18091
+  latency_ms: 30
+  model: "mock-model"
+
+ai_config:
+  aiProvider: "openai"
+  aiBaseUrl: "http://127.0.0.1:18091/v1"
+  aiApiKey: "perf-mock-key"
+  aiModel: "mock-model"
+  aiEnabled: true
+  blockPrivateEndpoints: false
+  persistApiKey: false
+  maxPromptTokens: 120000
+  maxOutputTokens: 4096
+  costGateWarnTokens: 8000
+  stageBTopK: 15
+  stageATopK: 30
+  projectContextEnabled: false
+  projectContextDir: ""
+
+fixtures:
+  big200: "bempdiff/fixtures/big200_v1.jar,bempdiff/fixtures/big200_v2.jar"
+  lib: "bempdiff/lib_v1.jar,bempdiff/lib_v2.jar"
+  small: "bempdiff/fixtures/small_real_v1.jar,bempdiff/fixtures/small_real_v2.jar"
+  folder: "E:/qoder-perf/env/folders/v1,E:/qoder-perf/env/folders/v2"
+  # rename/delete 会吃掉夹具文件本身，不可进阶梯：每轮从上面 pristine 的 folders 重拷一份到 folders_ops 再测。
+  folder_ops: "E:/qoder-perf/env/folders_ops/v1,E:/qoder-perf/env/folders_ops/v2"
+  nested_zip: "E:/qoder-perf/env/nested_v1.zip,E:/qoder-perf/env/nested_v2.zip"
+  # 单条目 257MB（> 256MB 阈值）→ 触发大包异步导出（202 + /api/export/{id} 管理链路）
+  largebytes: "E:/qoder-perf/env/largebytes/v1.jar,E:/qoder-perf/env/largebytes/v2.jar"
+  project_context_dir: "bempdiff/java_core/src"

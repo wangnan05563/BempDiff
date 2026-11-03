@@ -1,0 +1,12 @@
+{
+ "ts": "2026-11-03T12:44:54",
+ "server": {
+  "top_entries": 0
+ },
+ "harness": {
+  "top_entries": 154466,
+  "bempdiff-ai": 3806,
+  "bempdiff-export": 5688,
+  "bempdiff-report": 144972
+ }
+}
