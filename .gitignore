@@ -50,8 +50,6 @@ tmp/
 bempdiff/toolchain/*
 !bempdiff/toolchain/lib/
 bempdiff/dist_exe/
-# BempDiff Tauri 桌面壳 cargo 构建产物（由 scripts/build_tauri_app.ps1 生成，CARGO_TARGET_DIR 已项目作用域重定向至此）
-bempdiff/src-tauri/target/
 
 # ---------- 清理技能生成规则 (2026-08-11) ----------
 # 编译中间产物目录（javac 可再生）
@@ -126,7 +124,7 @@ bempdiff/verify_exe/
 # ---------- 工作空间清理规则 (2026-09-10, workspace-cleanup 第 3 轮) ----------
 # 本轮品类：退役工具链构建缓存 / npm 缓存 / javac 中间产物 / 运行时日志 /
 # 一次性验证产物。均已实删或移入工作空间外隔离区（详见 docs/cleanup-report.md）。
-# 已由既有规则覆盖、无需重复声明的（仅备注）：bempdiff/src-tauri/target/（2026-08-14 段）、
+# 已由既有规则覆盖、无需重复声明的（仅备注）：
 # release/（=electron-builder 全部产物，含 win-unpacked/.buildtmp）、
 # bempdiff/java_core/out/、bempdiff/java_core/test_out/、.scannerwork/、*.class、*.log、
 # bempdiff/webui/.npmcache*（含 .npmcache2 变体）。
@@ -216,8 +214,8 @@ jmeter.log
 # ---------- Java 编译中间产物（补充 dev_classes） ----------
 bempdiff/java_core/dev_classes/
 
-# ---------- Electron/Tauri 构建临时产物 ----------
-# src-tauri/target 已在第54行忽略；此处补充 dist_exe 解压中间态
+# ---------- Electron 构建临时产物 ----------
+# 此处补充 dist_exe 解压中间态
 bempdist/dist_exe/
 
 # ---------- CI/CD 报告与审计产物 ----------
