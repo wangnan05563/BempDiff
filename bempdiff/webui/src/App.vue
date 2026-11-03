@@ -12,6 +12,7 @@ import ReportPreview from './components/ReportPreview.vue'
 import CostGateDialog from './components/CostGateDialog.vue'
 import GuideOverlay from './components/GuideOverlay.vue'
 import ShortcutHelp from './components/ShortcutHelp.vue'
+import DragDropOverlay from './components/DragDropOverlay.vue'
 import { isEditableTarget } from './lib/shortcuts'
 import { t } from './lib/i18n'
 
