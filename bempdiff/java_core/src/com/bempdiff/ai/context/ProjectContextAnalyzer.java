@@ -74,8 +74,12 @@ public final class ProjectContextAnalyzer {
         List<String> techStack = inferTechStack(buildSystem, dependencies);
         List<String> conventions = inferConventions(files, buildSystem);
         String summary = synthesizeSummary(buildSystem, modules, entryPoints, conventions);
+        if (files.size() >= MAX_FILES) {
+            summary += "（上下文扫描已达 " + MAX_FILES + " 文件上限，部分文件未纳入分析）";
+        }
         return new ProjectContext(root.toString(), buildSystem, modules, dependencies,
-                entryPoints, configFiles, techStack, conventions, summary);
+                entryPoints, configFiles, techStack, conventions, summary,
+                files.size(), files.size() >= MAX_FILES);
     }
 
     // ---- 目录遍历（受限） ----

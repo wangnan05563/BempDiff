@@ -6,7 +6,6 @@ import com.bempdiff.ai.HttpAiAnalyzer;
 import com.bempdiff.ai.MockAiAnalyzer;
 import com.bempdiff.ai.StageASummary;
 import com.bempdiff.ai.context.ProjectContext;
-import com.bempdiff.ai.context.ProjectContextAnalyzer;
 import com.bempdiff.ai.context.ProjectContextCache;
 import com.bempdiff.ai.context.ProjectIndex;
 import com.bempdiff.ai.context.ProjectContextService;
@@ -2253,6 +2252,8 @@ public final class BempServer {
             pm.put("moduleCount", c.getModules() == null ? 0 : c.getModules().size());
             pm.put("depCount", c.getDependencies() == null ? 0 : c.getDependencies().size());
             pm.put("fileCount", e.getJavaFileCount());
+            if (c.getAnalyzedFiles() > 0) pm.put("analyzedFiles", c.getAnalyzedFiles());
+            if (c.isTruncated()) pm.put("truncated", true);
             pm.put("summary", c.getSummary());
             projects.add(pm);
             totalJava += e.getJavaFileCount();
@@ -2405,7 +2406,7 @@ public final class BempServer {
                 }
             }
             ProjectContext ctx = (projDir != null && !projDir.isEmpty())
-                    ? ProjectContextAnalyzer.analyze(Paths.get(projDir)) : null;
+                    ? resolveContextView(projDir) : null;
             AiConfig aiCfg = config.toAiConfig();
             boolean realLlm = aiCfg.getApiKey() != null && !aiCfg.getApiKey().isEmpty();
             AiAnalyzer analyzer = realLlm ? new HttpAiAnalyzer(aiCfg)
@@ -2523,7 +2524,7 @@ public final class BempServer {
         if (config.isProjectContextEnabled() && config.getProjectContextDir() != null
                 && !config.getProjectContextDir().isEmpty()) {
             try {
-                return ProjectContextAnalyzer.analyze(Paths.get(config.getProjectContextDir()));
+                return resolveContextView(config.getProjectContextDir());
             } catch (Exception e) {
                 LOG.log(Level.WARNING, "项目上下文分析失败（预估降级为无上下文）", e);
             }
@@ -2536,12 +2537,18 @@ public final class BempServer {
     private ProjectContext reportContext(String projDir) {
         if (projDir != null && !projDir.isEmpty()) {
             try {
-                return ProjectContextAnalyzer.analyze(Paths.get(projDir));
+                return resolveContextView(projDir);
             } catch (Exception e) {
                 LOG.log(Level.WARNING, "项目上下文分析失败（预估降级为无上下文）", e);
             }
         }
         return null;
+    }
+
+    /** 与 AI 主链路同源的上下文视图：多项目索引 + 缓存 + 失效检查。 */
+    private static ProjectContext resolveContextView(String projDir) {
+        ProjectIndex pIndex = ProjectContextService.resolve(projDir);
+        return ProjectContextService.renderContextView(pIndex);
     }
 
     /** 报告/流式分析：stageA 一次 + stageB 逐候选文件（截断 stageBTopK），汇总 token 估算。 */

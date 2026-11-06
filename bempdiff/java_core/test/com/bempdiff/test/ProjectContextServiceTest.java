@@ -8,6 +8,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.util.concurrent.TimeUnit;
 
 /** 项目级上下文缓存测试：首次构建、缓存命中、指纹失效重算、手动刷新。 */
 public final class ProjectContextServiceTest {
@@ -33,6 +35,9 @@ public final class ProjectContextServiceTest {
             Asserts.assertEquals("应识别 1 个项目", 1, first.size());
             long t1 = first.getScannedAt();
             Asserts.assertTrue("缓存文件应落盘", Files.isRegularFile(ProjectContextCache.cacheFile(projDir)));
+            Asserts.assertTrue("应记录实际扫描文件数",
+                    first.getProjects().get(0).getCtx().getAnalyzedFiles() > 0);
+            Asserts.assertFalse("小目录不应标记截断", first.getProjects().get(0).getCtx().isTruncated());
 
             // 2) 未改动 → 缓存命中（scannedAt 不变）
             ProjectIndex hit = ProjectContextService.resolve(projDir);
@@ -61,6 +66,28 @@ public final class ProjectContextServiceTest {
                 ProjectContextService.resolve("C:/__not_exist__/xyz"));
         Asserts.assertNull("空目录参数应返回 null", ProjectContextService.resolve("  "));
         Asserts.assertNull("null 应返回 null", ProjectContextService.resolve(null));
+    }
+
+    public void testPurgeStale_removesExpiredCache() throws IOException {
+        Path root = null;
+        String projDir = null;
+        try {
+            root = Files.createTempDirectory("bdcpurge");
+            Files.createDirectories(root);
+            Files.writeString(root.resolve("pom.xml"), "<project><artifactId>purge</artifactId></project>");
+            projDir = root.toString();
+            ProjectIndex first = ProjectContextService.resolve(projDir);
+            Asserts.assertNotNull("清理测试应先生成缓存", first);
+            Path cacheFile = ProjectContextCache.cacheFile(projDir);
+            Asserts.assertTrue("清理测试缓存应落盘", Files.isRegularFile(cacheFile));
+            Files.setLastModifiedTime(cacheFile,
+                    FileTime.fromMillis(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(31)));
+            ProjectContextCache.purgeStale(TimeUnit.DAYS.toMillis(30));
+            Asserts.assertFalse("超过保留期缓存应被删除", Files.exists(cacheFile));
+            Asserts.assertNull("删除后不应再读出缓存", ProjectContextCache.load(projDir));
+        } finally {
+            if (projDir != null) ProjectContextCache.clear(projDir);
+        }
     }
 
     public void testRenderContextView_multiProject() throws IOException {

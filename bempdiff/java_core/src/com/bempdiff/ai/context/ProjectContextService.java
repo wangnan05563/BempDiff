@@ -5,8 +5,13 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * 项目级上下文门面服务（需求 4/4）：AI 分析调用方（BempServer.runAiAnalysis / CLI report --ai）
@@ -31,6 +36,18 @@ public final class ProjectContextService {
     /** 上下文索引的时效窗口（毫秒）：窗口内缓存视为新鲜，跳过逐文件指纹遍历直接复用上一次结果。
      *  可按需通过 {@link #setCacheTtlMillis(long)} 调整（例如压测/大规模工程下调大窗口降低指纹开销）。 */
     private static volatile long cacheTtlMillis = 30_000L;
+    /** 磁盘缓存保留时长：首次加载上下文服务时按文件 mtime 淘汰过期缓存。 */
+    private static final long CACHE_RETENTION_MILLIS = 30L * 24L * 60L * 60L * 1000L;
+
+    /** 按目录串行的首次构建/失效重算请求：虚拟线程并发时避免重复全量扫描。 */
+    private static final Map<String, CompletableFuture<ProjectIndex>> IN_FLIGHT_RESOLVES =
+            new ConcurrentHashMap<>();
+    private static final ExecutorService CONTEXT_SCAN_POOL = Executors.newThreadPerTaskExecutor(
+            Thread.ofVirtual().name("bempdiff-project-context-", 0).factory());
+
+    static {
+        ProjectContextCache.purgeStale(CACHE_RETENTION_MILLIS);
+    }
 
     /** 调整上下文索引时效窗口。窗口为 0/负值时退化为「每请求必查指纹」（更实时、更慢）。 */
     public static void setCacheTtlMillis(long ttlMs) {
@@ -46,6 +63,30 @@ public final class ProjectContextService {
         if (projDir == null || projDir.trim().isEmpty()) return null;
         Path root = Paths.get(projDir.trim());
         if (!Files.isDirectory(root)) return null;
+        String resolveKey = root.toAbsolutePath().normalize().toString();
+        CompletableFuture<ProjectIndex> pending = IN_FLIGHT_RESOLVES.computeIfAbsent(
+                resolveKey, key -> startResolve(projDir));
+        try {
+            return pending.join();
+        } finally {
+            IN_FLIGHT_RESOLVES.remove(resolveKey, pending);
+        }
+    }
+
+    private static CompletableFuture<ProjectIndex> startResolve(String projDir) {
+        CompletableFuture<ProjectIndex> future = new CompletableFuture<>();
+        CONTEXT_SCAN_POOL.execute(() -> {
+            try {
+                future.complete(resolveUncached(projDir));
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        });
+        return future;
+    }
+
+    private static ProjectIndex resolveUncached(String projDir) {
+        Path root = Paths.get(projDir.trim());
         ProjectIndex cached = ProjectContextCache.load(projDir);
         if (cached != null) {
             // 时效窗口内：直接把缓存当新鲜结果返回，避免每次请求对全量工程做指纹遍历（P0 性能缺陷：大工程每请求秒级）。

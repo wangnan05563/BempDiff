@@ -22,11 +22,22 @@ public final class ProjectContext {
     private final List<String> techStack;   // 技术栈关键词
     private final List<String> conventions; // 包结构/命名约定
     private final String summary;           // 综合架构叙述（供 prompt）
+    private final int analyzedFiles;        // 受扫描上限约束后实际分析的文件数；旧缓存为 0
+    private final boolean truncated;        // 是否因扫描上限提前停止
 
     public ProjectContext(String rootPath, String buildSystem, List<String> modules, // NOSONAR(S107) - 多参重载为既有公开 API
                           List<String> dependencies, List<String> entryPoints,
                           List<String> configFiles, List<String> techStack,
                           List<String> conventions, String summary) { // NOSONAR - 9 个字段由各字段单独 getter 暴露，重建参数对象反而过度设计
+        this(rootPath, buildSystem, modules, dependencies, entryPoints, configFiles,
+                techStack, conventions, summary, 0, false);
+    }
+
+    public ProjectContext(String rootPath, String buildSystem, List<String> modules, // NOSONAR(S107) - 11 个字段由各字段单独 getter 暴露
+                          List<String> dependencies, List<String> entryPoints,
+                          List<String> configFiles, List<String> techStack,
+                          List<String> conventions, String summary,
+                          int analyzedFiles, boolean truncated) { // NOSONAR - 扫描可观测性与既有上下文字段并列
         this.rootPath = rootPath;
         this.buildSystem = buildSystem;
         this.modules = modules;
@@ -36,6 +47,8 @@ public final class ProjectContext {
         this.techStack = techStack;
         this.conventions = conventions;
         this.summary = summary;
+        this.analyzedFiles = analyzedFiles;
+        this.truncated = truncated;
     }
 
     public String getRootPath() { return rootPath; }
@@ -47,6 +60,8 @@ public final class ProjectContext {
     public List<String> getTechStack() { return techStack; }
     public List<String> getConventions() { return conventions; }
     public String getSummary() { return summary; }
+    public int getAnalyzedFiles() { return analyzedFiles; }
+    public boolean isTruncated() { return truncated; }
 
     /** 未提供有效工程目录时视为「未启用上下文增强」。 */
     public boolean isEmpty() {
@@ -98,6 +113,8 @@ public final class ProjectContext {
         m.put("techStack", techStack);
         m.put("conventions", conventions);
         m.put("summary", summary);
+        m.put("analyzedFiles", analyzedFiles);
+        m.put("truncated", truncated);
         return m;
     }
 
@@ -112,7 +129,9 @@ public final class ProjectContext {
                 strList(m.get("configFiles")),
                 strList(m.get("techStack")),
                 strList(m.get("conventions")),
-                str(m.get("summary")));
+                str(m.get("summary")),
+                (m.get("analyzedFiles") instanceof Number) ? ((Number) m.get("analyzedFiles")).intValue() : 0,
+                Boolean.TRUE.equals(m.get("truncated")));
     }
 
     private static String str(Object o) {

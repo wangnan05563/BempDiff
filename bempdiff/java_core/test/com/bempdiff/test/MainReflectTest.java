@@ -293,18 +293,23 @@ public final class MainReflectTest {
 
     public void testLoadProjectContextValidDir() throws Exception {
         Path proj = tempDir("bdfmain-proj");
-        Files.writeString(proj.resolve("pom.xml"),
-                "<project><modelVersion>4.0.0</modelVersion>"
-                        + "<groupId>com.test</groupId><artifactId>demo</artifactId>"
-                        + "<version>1.0.0</version></project>\n", StandardCharsets.UTF_8);
-        ProjectContext ctx = (ProjectContext) call("loadProjectContext", LIST_STR,
-                new ArrayList<>(List.of("--project", proj.toString())));
-        Asserts.assertNotNull("有效目录应返回上下文", ctx);
-        Asserts.assertFalse("有效目录不应为空上下文", ctx.isEmpty());
-        Asserts.assertEquals("应识别 Maven 构建系统: " + ctx.getBuildSystem(), true,
-                "maven".equalsIgnoreCase(ctx.getBuildSystem()));
-        Asserts.assertNotNull("模块列表不应为 null（根 pom 单模块可为空）", ctx.getModules());
-        Asserts.assertTrue("依赖应被提取: " + ctx.getDependencies(), ctx.getDependencies().contains("demo"));
+        try {
+            Files.writeString(proj.resolve("pom.xml"),
+                    "<project><modelVersion>4.0.0</modelVersion>"
+                            + "<groupId>com.test</groupId><artifactId>demo</artifactId>"
+                            + "<version>1.0.0</version></project>\n", StandardCharsets.UTF_8);
+            ProjectContext ctx = (ProjectContext) call("loadProjectContext", LIST_STR,
+                    new ArrayList<>(List.of("--project", proj.toString())));
+            Asserts.assertNotNull("有效目录应返回上下文", ctx);
+            Asserts.assertFalse("有效目录不应为空上下文", ctx.isEmpty());
+            Asserts.assertEquals("CLI 应走多项目索引渲染: " + ctx.getBuildSystem(), true,
+                    ctx.getBuildSystem().startsWith("多项目仓库（1 个项目）"));
+            Asserts.assertNotNull("模块列表不应为 null（聚合视图占位）", ctx.getModules());
+            Asserts.assertTrue("上下文摘要应包含项目索引细节: " + ctx.getSummary(),
+                    ctx.getSummary().contains("Maven") && ctx.getSummary().contains("."));
+        } finally {
+            com.bempdiff.ai.context.ProjectContextCache.clear(proj.toString());
+        }
     }
 
     public void testLoadProjectContextCatchBranch() throws Exception {
@@ -318,8 +323,7 @@ public final class MainReflectTest {
         Path nope = tempDir("bdfmain-proj-none").resolve("not-created");
         ProjectContext ctx = (ProjectContext) call("loadProjectContext", LIST_STR,
                 new ArrayList<>(List.of("--project", nope.toString())));
-        Asserts.assertNotNull("无效目录仍返回对象（不抛）", ctx);
-        Asserts.assertTrue("无效目录应视为空上下文", ctx.isEmpty());
+        Asserts.assertNull("无效目录应降级为 null", ctx);
     }
 
     // ---------- requireArgs（仅合法分支） ----------

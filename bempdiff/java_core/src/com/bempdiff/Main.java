@@ -22,7 +22,7 @@ import com.bempdiff.ai.FileAnalysis;
 import com.bempdiff.ai.MockAiAnalyzer;
 import com.bempdiff.ai.HttpAiAnalyzer;
 import com.bempdiff.ai.context.ProjectContext;
-import com.bempdiff.ai.context.ProjectContextAnalyzer;
+import com.bempdiff.ai.context.ProjectContextService;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -283,7 +283,7 @@ public final class Main { // NOSONAR(S6539) - CLI 聚合入口，依赖面广但
         if (!a.contains(ARG_PROJECT)) return null;
         try {
             Path projDir = Paths.get(a.get(a.indexOf(ARG_PROJECT) + 1));
-            ProjectContext ctx = ProjectContextAnalyzer.analyze(projDir);
+            ProjectContext ctx = ProjectContextService.renderContextView(ProjectContextService.resolve(projDir.toString()));
             LOG.log(java.util.logging.Level.INFO, "[AI] 项目级上下文已加载：{0}（构建系统={1}, 模块数={2}）",
                     new Object[]{projDir, ctx.getBuildSystem(), ctx.getModules().size()});
             return ctx;

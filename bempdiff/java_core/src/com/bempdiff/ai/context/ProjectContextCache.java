@@ -17,7 +17,7 @@ import java.util.logging.Logger;
 
 /**
  * 项目级上下文缓存（需求 3/4）：将 {@link ProjectIndex} 落盘到
- * {@code ~/.bempdiff/ai-context-cache/<sha1(projDir)>.json}，避免每次 AI 分析都全量重扫。
+ * {@code ~/.bempdiff/ai-context-cache/<sha256-prefix(projDir)>.json}，避免每次 AI 分析都全量重扫。
  *
  * <p><b>存储方案</b>：用户级目录（不写业务仓库，避免污染 BEMP5.0DEV）；单文件 JSON，
  * 含 rootPath、scannedAt、项目清单（relPath + fingerprint + 完整理解结果）。
@@ -32,7 +32,7 @@ public final class ProjectContextCache {
     private static final String DIR_CACHE = "ai-context-cache";
     private static final String SUFFIX = ".json";
 
-    /** 进程内缓存：避免同目录重复读盘（BempServer 单线程 handler，无需复杂并发控制）。 */
+    /** 进程内缓存：避免同目录重复读盘；Map 操作线程安全，目录级构建由 Service 去重。 */
     private static final Map<String, ProjectIndex> MEM = new ConcurrentHashMap<>();
 
     /** 进程内「上次指纹校验时间」（毫秒）：配合 {@link ProjectContextService} 的时效窗口，
@@ -47,7 +47,7 @@ public final class ProjectContextCache {
         return Paths.get(System.getProperty("user.home"), ".bempdiff", DIR_CACHE);
     }
 
-    /** 缓存文件路径 = cacheDir/{sha1(projDir)}.json。 */
+    /** 缓存文件路径 = cacheDir/{SHA-256 前 8 字节}.json。 */
     public static Path cacheFile(String projDir) {
         return cacheDir().resolve(shortHash(norm(projDir)) + SUFFIX);
     }
@@ -115,6 +115,34 @@ public final class ProjectContextCache {
         MEM_VALIDATED.clear();
     }
 
+    /** 按 mtime 淘汰超过保留期的磁盘缓存；服务首次加载时调用一次。 */
+    public static void purgeStale(long maxAgeMillis) {
+        if (maxAgeMillis <= 0L) return;
+        long cutoff = System.currentTimeMillis() - maxAgeMillis;
+        try (java.util.stream.Stream<Path> st = Files.list(cacheDir())) {
+            st.filter(p -> p.getFileName().toString().endsWith(SUFFIX)).forEach(p -> {
+                try {
+                    if (Files.getLastModifiedTime(p).toMillis() >= cutoff) return;
+                    String rootPath = str(Json.parseObject(Files.readString(p, StandardCharsets.UTF_8)).get("rootPath"));
+                    if (Files.deleteIfExists(p)) {
+                        clearMemoryForRoot(rootPath);
+                        LOG.log(Level.INFO, "已淘汰过期项目上下文缓存：{0}", p.getFileName());
+                    }
+                } catch (Exception e) {
+                    LOG.log(Level.WARNING, "淘汰项目上下文缓存失败：{0}", e.getMessage());
+                }
+            });
+        } catch (Exception ignored) {
+            // 缓存目录不存在或不可读时无需清理
+        }
+    }
+
+    private static void clearMemoryForRoot(String rootPath) {
+        if (rootPath == null || rootPath.isEmpty()) return;
+        MEM.remove(norm(rootPath));
+        MEM_VALIDATED.remove(norm(rootPath));
+    }
+
     private static String norm(String s) {
         return (s == null) ? "" : s.replace('\\', '/').replaceAll("/+$", ""); // NOSONAR java:S5852 — 复核通过：输入有界（单行/文件名/限大小小文件 readIfSmall），模式锚定且实际输入无回溯放大
     }
@@ -129,6 +157,10 @@ public final class ProjectContextCache {
         } catch (NoSuchAlgorithmException e) {
             return String.valueOf(s.hashCode());
         }
+    }
+
+    private static String str(Object o) {
+        return (o == null) ? "" : String.valueOf(o);
     }
 
     /** 便捷组装：供 Service 返回缓存命中摘要。 */

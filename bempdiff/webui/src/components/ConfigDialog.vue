@@ -782,7 +782,9 @@ function pickImportFile(ev) {
                 <ul class="list-unstyled mb-0 ps-2 context-project-list" style="max-height:150px;overflow:auto">
                   <li v-for="p in ctxData.projects" :key="p.relPath" class="d-flex gap-2 align-items-baseline text-nowrap" style="font-size:.74rem">
                     <code class="text-body">{{ p.relPath }}</code>
-                    <span class="text-secondary">{{ t('cfg.ctx.projectLine', { bs: p.buildSystem, m: p.moduleCount, d: p.depCount, f: p.fileCount }) }}</span>
+                    <span class="text-secondary">{{ p.truncated
+                      ? t('cfg.ctx.projectLineTruncated', { bs: p.buildSystem, m: p.moduleCount, d: p.depCount, f: p.fileCount, a: p.analyzedFiles ?? 0 })
+                      : t('cfg.ctx.projectLine', { bs: p.buildSystem, m: p.moduleCount, d: p.depCount, f: p.fileCount }) }}</span>
                   </li>
                 </ul>
                 <div class="form-text mt-1" style="font-size:.68rem">{{ t('cfg.ctx.note') }}</div>
