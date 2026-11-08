@@ -1,0 +1,35 @@
+{
+ "variant": "classes",
+ "threads": 4,
+ "duration": 60,
+ "rc": 0,
+ "samples": 12807,
+ "errors": 0,
+ "error_rate": 0.0,
+ "avg": 18.0,
+ "p50": 6,
+ "p95": 72,
+ "p99": 240,
+ "max": 1542,
+ "labels": {
+  "S diag bundle": {
+   "n": 6405,
+   "err": 0,
+   "max": 1542,
+   "avg": 30.4,
+   "codes": {
+    "200": 6405
+   }
+  },
+  "S admin cleanup": {
+   "n": 6402,
+   "err": 0,
+   "max": 1518,
+   "avg": 5.5,
+   "codes": {
+    "200": 6402
+   }
+  }
+ },
+ "tmp_after": []
+}

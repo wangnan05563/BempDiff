@@ -1,0 +1,35 @@
+{
+ "variant": "jar",
+ "threads": 8,
+ "duration": 60,
+ "rc": 0,
+ "samples": 9252,
+ "errors": 0,
+ "error_rate": 0.0,
+ "avg": 50.3,
+ "p50": 13,
+ "p95": 201,
+ "p99": 633,
+ "max": 5947,
+ "labels": {
+  "S diag bundle": {
+   "n": 4628,
+   "err": 0,
+   "max": 5947,
+   "avg": 83.8,
+   "codes": {
+    "200": 4628
+   }
+  },
+  "S admin cleanup": {
+   "n": 4624,
+   "err": 0,
+   "max": 680,
+   "avg": 16.9,
+   "codes": {
+    "200": 4624
+   }
+  }
+ },
+ "tmp_after": []
+}

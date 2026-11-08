@@ -1,0 +1,37 @@
+{
+ "variant": "jar",
+ "threads": 4,
+ "duration": 60,
+ "rc": 0,
+ "samples": 8234,
+ "errors": 27,
+ "error_rate": 0.3279,
+ "avg": 29.1,
+ "p50": 5,
+ "p95": 19,
+ "p99": 57,
+ "max": 60014,
+ "labels": {
+  "S diag bundle": {
+   "n": 4119,
+   "err": 27,
+   "max": 60014,
+   "avg": 55.9,
+   "codes": {
+    "200": 4092,
+    "500": 24,
+    "Non HTTP response code: java.net.SocketTimeoutException": 3
+   }
+  },
+  "S admin cleanup": {
+   "n": 4115,
+   "err": 0,
+   "max": 79,
+   "avg": 2.4,
+   "codes": {
+    "200": 4115
+   }
+  }
+ },
+ "tmp_after": []
+}
