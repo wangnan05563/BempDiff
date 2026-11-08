@@ -2,7 +2,8 @@
 # 编译 java_core/src + java_core/test 并跑 TestRunner 全量（含 FrontendTest）。
 set -u
 
-ROOT="D:/code/otherProjects/18_comparePakage"
+# 项目根由脚本位置推导（java_core → bempdiff → 项目根），避免目录迁移后失效
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 JAVAC="$ROOT/bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64/bin/javac.exe"
 JAVA="$ROOT/bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64/bin/java.exe"
 RELEASE_FLAG=""

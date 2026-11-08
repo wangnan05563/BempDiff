@@ -1,7 +1,8 @@
 # 编译 java_core 并跑 ModelTest + DecompileTest（短哈希相关 + BempServer 透出源）
 $ErrorActionPreference = 'Continue'
-$Jdk = 'D:\code\otherProjects\18_comparePakage\bempdiff\toolchain\zulu21.52.15-ca-jdk21.0.12-win_x64\bin'
-$Proto = 'D:\code\otherProjects\18_comparePakage\bempdiff'
+# 路径由脚本位置推导（scripts → bempdiff），避免目录迁移后失效
+$Proto = Split-Path $PSScriptRoot -Parent
+$Jdk = Join-Path $Proto 'toolchain\zulu21.52.15-ca-jdk21.0.12-win_x64\bin'
 $Src   = Join-Path $Proto 'java_core\src'
 $Test  = Join-Path $Proto 'java_core\test'
 $Lib   = Join-Path $Proto 'dist_input\app\lib'

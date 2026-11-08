@@ -20,10 +20,11 @@
 - 夹具：`bempdiff/lib_v1.jar`(3.12.0) / `bempdiff/lib_v2.jar`(3.14.0)
 
 ```bash
-JAVA="D:/code/otherProjects/18_comparePakage/bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64/bin/java.exe"
-APPJAR="D:/code/otherProjects/18_comparePakage/bempdiff/dist/BempDiff/app/app.jar"
-FX="D:/code/otherProjects/18_comparePakage/bempdiff/dist/BempDiff/app"
-CFR="D:/code/otherProjects/18_comparePakage/bempdiff/cfr.jar"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"   # 项目根（本文件位于 bempdiff/verify_exe）
+JAVA="$ROOT/bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64/bin/java.exe"
+APPJAR="$ROOT/bempdiff/dist/BempDiff/app/app.jar"
+FX="$ROOT/bempdiff/dist/BempDiff/app"
+CFR="$ROOT/bempdiff/cfr.jar"
 CP="$APPJAR;$FX/javafx-base-21-win.jar;$FX/javafx-controls-21-win.jar;$FX/javafx-fxml-21-win.jar;$FX/javafx-graphics-21-win.jar;$CFR"
 
 # 1) COMPARE（核心差异比对）

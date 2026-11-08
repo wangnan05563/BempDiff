@@ -17,7 +17,7 @@ mode: jmeter
 
 jmeter:
   bin: "D:/code/Jmeter/apache-jmeter-5.6.3/bin/jmeter.bat"
-  java_home: "D:/code/otherProjects/18_comparePakage/bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64"
+  java_home: "bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64"   # 相对项目根，避免目录迁移后失效
   jvm_args: []
   properties_file: ""
   cli_extra_args: ""

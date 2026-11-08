@@ -15,7 +15,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
-ROOT = pathlib.Path("D:/code/otherProjects/18_comparePakage")
+# 项目根由脚本位置推导（scripts → 项目根），避免目录迁移后失效
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 IMG = ROOT / "docs/promo/img"
 OUT = ROOT / "docs/promo/BempDiff-产品介绍.docx"
 LOGO = ROOT / "bempdiff/bempdiff-logo.png"
@@ -450,7 +451,7 @@ def build():
         ("试用建议：", "拿最近一次已发布的两个包做一次历史比对，用已知的改动清单校验工具的差异结果——"
                       "这是评估工具是否可信最快的方式。"),
     ])
-    para(doc, "项目地址：https://github.com/wangnan05563/bempDiff", 10, True, ACCENT, space_after=2)
+    para(doc, "项目地址：https://github.com/wangnan05563/BempDiff", 10, True, ACCENT, space_after=2)
     para(doc, "许可：MIT　·　形态：桌面应用 / 命令行 / 本地 Web 服务", 9, False, GREY)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)

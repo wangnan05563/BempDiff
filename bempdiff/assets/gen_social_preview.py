@@ -4,8 +4,10 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 import os
 
 W, H = 1280, 640
-LOGO = "D:/code/otherProjects/18_comparePakage/bempdiff/bempdiff-logo.png"
-OUT = "D:/code/otherProjects/18_comparePakage/bempdiff/assets/social-preview-1280x640.png"
+# 路径由脚本位置推导（assets 目录），避免目录迁移后失效
+_ASSETS = os.path.dirname(os.path.abspath(__file__))
+LOGO = os.path.join(os.path.dirname(_ASSETS), "bempdiff-logo.png")
+OUT = os.path.join(_ASSETS, "social-preview-1280x640.png")
 
 BLUE_TOP = (43, 99, 236)      # #2B63EC
 BLUE_BOT = (18, 41, 110)      # #12296E

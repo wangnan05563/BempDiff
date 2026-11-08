@@ -43,7 +43,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$root      = "D:\code\otherProjects\18_comparePakage"
+# 项目根由脚本位置推导（tooling/scripts/perf → 上三级），避免目录迁移后失效
+$root      = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+Set-Location $root   # JMX 内夹具用相对路径，JMeter 与服务端 cwd 必须是项目根
 $proto     = Join-Path $root "bempdiff"
 $distInput = Join-Path $proto "dist_input"
 $appDir    = Join-Path $distInput "app"

@@ -2,7 +2,7 @@
 
 [![GitHub social preview](assets/social-preview-1280x640.png)](../README.md)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](../LICENSE)
-[![Release](https://img.shields.io/github/v/release/wangnan05563/bempDiff.svg)](https://github.com/wangnan05563/bempDiff/releases/latest)
+[![Release](https://img.shields.io/github/v/release/wangnan05563/BempDiff.svg)](https://github.com/wangnan05563/BempDiff/releases/latest)
 
 > 软件构建包（war / jar / zip / 文件夹）差异化对比与智能分析桌面工具：丢进老包和新包，自动比对差异、反编译看源码级改动、AI 分析风险与测试要点，导出报告与差异资产。双击安装即用，无需安装 Java。
 
@@ -48,7 +48,7 @@ BempDiff 面向「生产版本 vs 下发版本」的发布前比对场景：把�
 
 ## 安装
 
-从 [Releases](https://github.com/wangnan05563/bempDiff/releases) 下载对应平台安装包（Windows 为 `BempDiff-<版本>-setup.exe`，NSIS 安装包，内嵌瘦 JRE，无需装 Java），双击安装即可。
+从 [Releases](https://github.com/wangnan05563/BempDiff/releases) 下载对应平台安装包（Windows 为 `BempDiff-<版本>-setup.exe`，NSIS 安装包，内嵌瘦 JRE，无需装 Java），双击安装即可。
 arm64 / Linux / macOS 产物由 `.github/workflows/` 下的工作流按需构建（`workflow_dispatch`），macOS 包未签名，首次打开需右键 → 打开。构建细节见本文「[开发](#开发)」章节。
 
 ## 快速开始
@@ -97,7 +97,7 @@ BempDiff.exe ci --left <old> --right <new> [--report <md>] [--json <out.json>]
 - **对比选项**（⚙ 配置中心）：内部包前缀（L1 展开规则）、Top-K、忽略空白/注释/正则/扩展名、嵌套解包线程数与深度
 - **AI**：厂商（OpenAI 兼容/Azure/Ollama/通义等）、BaseURL、API Key（掩码显示，默认不落盘）、模型、连接测试、代理、成本闸门阈值、单次输入/输出 token 上限
 - **界面**：明暗主题、强调色、语法高亮主题、语言（中/英）、差异树过滤、启动图
-- **更新检查**：「关于 → 检查更新」读取 GitHub 最新 Release（默认仓库 `wangnan05563/bempDiff`，可用 `BEMPDIFF_GITHUB_REPO` 覆盖；私有仓库或限流时可在关于页填 GitHub 令牌，或用环境变量 `GITHUB_TOKEN`），详见 [`../docs/GitHub更新手册.md`](../docs/GitHub更新手册.md)
+- **更新检查**：「关于 → 检查更新」读取 GitHub 最新 Release（默认仓库 `wangnan05563/BempDiff`，可用 `BEMPDIFF_GITHUB_REPO` 覆盖；私有仓库或限流时可在关于页填 GitHub 令牌，或用环境变量 `GITHUB_TOKEN`），详见 [`../docs/GitHub更新手册.md`](../docs/GitHub更新手册.md)
 
 ## 开发
 

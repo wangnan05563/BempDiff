@@ -1,7 +1,8 @@
 # Build java_core (src + test) and run the full TestRunner suite.
 # PowerShell port of build_and_test.sh (bash is unavailable on this machine).
 $ErrorActionPreference = "Stop"
-$ROOT = "D:\code\otherProjects\18_comparePakage"
+# 项目根由脚本位置推导（tooling/scripts/quality → 上三级），避免目录迁移后失效
+$ROOT = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 # JDK resolution: JAVA21_HOME -> JAVA_HOME -> bundled Zulu (bundled one may be incomplete/corrupted)
 $jdkHome = $null
 foreach ($cand in @($env:JAVA21_HOME, $env:JAVA_HOME, "$ROOT\bempdiff\toolchain\zulu21.52.15-ca-jdk21.0.12-win_x64")) {

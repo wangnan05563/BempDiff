@@ -9,7 +9,8 @@
 """
 import os, zipfile, subprocess, sys
 
-ROOT = "D:/code/otherProjects/18_comparePakage"
+# 项目根由脚本位置推导（verify_exe → tooling → 项目根），避免目录迁移后失效
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 VER = os.path.join(ROOT, "tooling/verify_exe")
 JAVAC = os.path.join(ROOT, "bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64/bin/javac.exe")
 PKG = "org/difflib"

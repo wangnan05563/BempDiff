@@ -3,13 +3,16 @@
 # 依赖：新编译的 java_core/out + toolchain Zulu21；用 MockAiAnalyzer（无 API Key）。
 # 用法：先起 server（见注释），再跑本脚本。断言失败时退出码非 0。
 import json
+import pathlib
 import sys
 import time
 import urllib.request
 
 BASE = "http://127.0.0.1:18800"
-OLD = "D:/code/otherProjects/18_comparePakage/bempdiff/dist_input/_smoke/olddir"
-NEW = "D:/code/otherProjects/18_comparePakage/bempdiff/dist_input/_smoke/newdir"
+# 脚本所在 tests_smoke → java_core → bempdiff，夹具路径据此推导
+_PROTO = pathlib.Path(__file__).resolve().parents[2]
+OLD = str(_PROTO / "dist_input/_smoke/olddir")
+NEW = str(_PROTO / "dist_input/_smoke/newdir")
 
 
 def post(path, body):

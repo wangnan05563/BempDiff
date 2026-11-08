@@ -1,6 +1,7 @@
 #!/bin/bash
 # decompile 缩放/并发压测启动脚本（后台运行；需 harness 已在 18080 存活）
-cd /d/code/otherProjects/18_comparePakage
+# 项目根由脚本位置推导（tooling/scripts/perf → 上三级），避免目录迁移后失效
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.." || exit 1
 export JAVA_HOME="$(pwd)/bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64"
 JM="$JMETER_HOME/bin/jmeter.bat"
 PY="C:/Users/hspcadmin/.workbuddy/binaries/python/versions/3.13.12/python.exe"

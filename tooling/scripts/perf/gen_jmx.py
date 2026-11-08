@@ -19,9 +19,9 @@ import os, xml.sax.saxutils as X
 OUT = "tooling/jmeter"
 os.makedirs(OUT, exist_ok=True)
 
-FIX = "D:/code/otherProjects/18_comparePakage/bempdiff/fixtures"
-LIB1 = "D:/code/otherProjects/18_comparePakage/bempdiff/lib_v1.jar"
-LIB2 = "D:/code/otherProjects/18_comparePakage/bempdiff/lib_v2.jar"
+FIX = "bempdiff/fixtures"   # 相对项目根；JMeter 启动时 cwd 必须是项目根
+LIB1 = "bempdiff/lib_v1.jar"
+LIB2 = "bempdiff/lib_v2.jar"
 BIG200_1 = FIX + "/big200_v1.jar"; BIG200_2 = FIX + "/big200_v2.jar"
 BIG500_1 = FIX + "/big500_v1.jar"; BIG500_2 = FIX + "/big500_v2.jar"
 SMALL_1 = FIX + "/small_real_v1.jar"; SMALL_2 = FIX + "/small_real_v2.jar"

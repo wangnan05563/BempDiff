@@ -23,7 +23,8 @@ param(
   [switch]$Legacy
 )
 $ErrorActionPreference = 'Continue'   # 单文件失败不中断整体审计
-$root = "D:\code\otherProjects\18_comparePakage"
+# 项目根由脚本位置推导（tooling/scripts/dev → 上三级），避免目录迁移后失效
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $ts = Get-Date -Format "yyyyMMdd-HHmmss"
 $logs = Join-Path $root "logs"
 if (-not (Test-Path $logs)) { New-Item -ItemType Directory -Force -Path $logs | Out-Null }

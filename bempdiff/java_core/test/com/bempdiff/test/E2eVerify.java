@@ -36,7 +36,7 @@ public final class E2eVerify {
         String newZ = System.getProperty("bempdiff.newZip",
                 "E:\\testC\\BEMP5.0V202301-02-036M061(20260707-1135).zip");
         String workArg = System.getProperty("bempdiff.workDir",
-                "D:/code/otherProjects/18_comparePakage/bempdiff/java_core/.e2e-tmp");
+                "bempdiff/java_core/.e2e-tmp"); // 相对项目根，避免硬编码绝对路径
 
         // 与 BempServer /api/session/compare 完全一致：CompareOptions 默认 → toUnpackOptions，开启 unpackNested
         CompareOptions opts = CompareOptions.fromRequest(Map.of("options", Map.of("unpackNested", true)));

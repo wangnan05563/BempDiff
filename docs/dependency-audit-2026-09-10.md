@@ -1,7 +1,7 @@
 # 依赖审计报告（未使用依赖分析）
 
 - **日期**：2026-09-10
-- **项目**：差异化对比工具（18_comparePakage）
+- **项目**：差异化对比工具（BempDiff）
 - **范围**：`bempdiff/`、`bempdiff/webui/`、`bempdiff/dev-shell/` 三处 `package.json`
 - **性质**：**只读分析**（本轮未修改任何 `package.json` / `package-lock.json`）
 - **依据**：`cleanup-config.yaml` 驱动的清理规范第 1 条第 4 项「未使用依赖包：通过包管理器分析并移除项目中未被引用的依赖」

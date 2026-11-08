@@ -11,7 +11,9 @@ import shutil
 import sys
 import time
 
-SOAK = r"D:\code\otherProjects\18_comparePakage\tooling\jmeter\results\perf-2026-11-01\load\soak"
+# 与脚本同级的上级目录下的 load/soak，避免硬编码绝对路径
+_PERF_RUN = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SOAK = os.path.join(_PERF_RUN, "load", "soak")
 CYC = os.path.join(SOAK, "cycles.json")
 PLANS = ["soak_server-t4", "soak_harness-t4", "soak_write-t4"]
 DEADLINE = time.time() + float(sys.argv[1]) * 60 if len(sys.argv) > 1 else time.time() + 5 * 3600

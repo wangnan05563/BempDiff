@@ -32,7 +32,7 @@ public final class UpdateCheckService {
     }
 
     /** 默认仓库（owner/repo）。仓库地址非凭证；用环境变量 BEMPDIFF_GITHUB_REPO 覆盖。 */
-    public static final String DEFAULT_REPO = "wangnan05563/bempDiff";
+    public static final String DEFAULT_REPO = "wangnan05563/BempDiff";
 
     /** 环境变量名：仓库覆盖（owner/repo）。 */
     public static final String ENV_REPO = "BEMPDIFF_GITHUB_REPO";

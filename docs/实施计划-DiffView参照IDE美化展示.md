@@ -142,7 +142,7 @@ public final class DecompiledUnit {
 
 - [ ] **Step 4：更新 `Decompiler` 调点产出哈希**
 
-在 [Decompiler.java](file:///d:/code/otherProjects/18_comparePakage/bempdiff/java_core/src/com/bempdiff/decompile/Decompiler.java) `decompileBytes()` 中（行 350 附近）：
+在 [Decompiler.java](../../bempdiff/java_core/src/com/bempdiff/decompile/Decompiler.java) `decompileBytes()` 中（行 350 附近）：
 
 ```java
 public DecompiledUnit decompileBytes(byte[] oldBytes, byte[] newBytes, String key, DiffRules rules) {

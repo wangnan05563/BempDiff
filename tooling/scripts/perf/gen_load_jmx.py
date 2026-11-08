@@ -19,12 +19,13 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")
 OUT = os.path.join(ROOT, "tooling", "jmeter", "load")
 os.makedirs(OUT, exist_ok=True)
 
-SMALL_L = "D:/code/otherProjects/18_comparePakage/bempdiff/fixtures/small_real_v1.jar"
-SMALL_R = "D:/code/otherProjects/18_comparePakage/bempdiff/fixtures/small_real_v2.jar"
-BIG_L = "D:/code/otherProjects/18_comparePakage/bempdiff/fixtures/big200_v1.jar"
-BIG_R = "D:/code/otherProjects/18_comparePakage/bempdiff/fixtures/big200_v2.jar"
-LIB_L = "D:/code/otherProjects/18_comparePakage/bempdiff/lib_v1.jar"
-LIB_R = "D:/code/otherProjects/18_comparePakage/bempdiff/lib_v2.jar"
+# 相对项目根；JMeter/服务端启动时 cwd 必须是项目根
+SMALL_L = "bempdiff/fixtures/small_real_v1.jar"
+SMALL_R = "bempdiff/fixtures/small_real_v2.jar"
+BIG_L = "bempdiff/fixtures/big200_v1.jar"
+BIG_R = "bempdiff/fixtures/big200_v2.jar"
+LIB_L = "bempdiff/lib_v1.jar"
+LIB_R = "bempdiff/lib_v2.jar"
 
 
 def _arg(name, value, use_equals=True, encode=True):

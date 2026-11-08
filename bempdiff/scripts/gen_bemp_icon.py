@@ -11,9 +11,12 @@
 依赖：Pillow（managed Python: pip install pillow）
 运行：python bempdiff/scripts/gen_bemp_icon.py
 """
+import os
+
 from PIL import Image, ImageDraw
 
-ROOT = "D:/code/otherProjects/18_comparePakage/prototype"
+# 项目根由脚本位置推导（scripts → bempdiff → 项目根），保留原 prototype 子目录语义
+ROOT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "prototype")
 ICO_PATH = ROOT + "/assets/bempdiff.ico"
 PNG_PATH = ROOT + "/bempdiff-logo.png"
 

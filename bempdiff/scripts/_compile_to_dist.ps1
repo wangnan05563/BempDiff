@@ -1,8 +1,9 @@
 # 编译 java_core 源码到 dist_input/classes（main.js findClasspath 优先读这里）
 # Task 2 完成后调用，确保后端跑最新源码。
 $ErrorActionPreference = 'Continue'
-$Jdk = 'D:\code\otherProjects\18_comparePakage\bempdiff\toolchain\zulu21.52.15-ca-jdk21.0.12-win_x64\bin'
-$Proto = 'D:\code\otherProjects\18_comparePakage\bempdiff'
+# 路径由脚本位置推导（scripts → bempdiff），避免目录迁移后失效
+$Proto = Split-Path $PSScriptRoot -Parent
+$Jdk = Join-Path $Proto 'toolchain\zulu21.52.15-ca-jdk21.0.12-win_x64\bin'
 $Src   = Join-Path $Proto 'java_core\src'
 $Lib   = Join-Path $Proto 'dist_input\app\lib'
 $Cfr   = Join-Path $Proto 'dist_input\app\cfr.jar'

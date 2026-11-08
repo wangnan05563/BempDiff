@@ -5,7 +5,7 @@
 ## 第一部分：人工操作手册
 本手册面向需要在 GitHub 上人工准备、配置发布源并排查更新功能的人员。应用的「关于 → 检查更新」会自动连接 GitHub 读取最新 Release 并对比版本。
 
-- 默认发布仓库：`wangnan05563/bempDiff`
+- 默认发布仓库：`wangnan05563/BempDiff`
 - 覆盖仓库地址：环境变量 `BEMPDIFF_GITHUB_REPO`（格式 `owner/repo`）
 
 ---
@@ -72,7 +72,7 @@
 | --- | --- | --- |
 | 最新版本号 / 发布说明 | GitHub **Releases API** `GET https://api.github.com/repos/{owner}/{repo}/releases/latest` | 取最新一条正式 release（tag / name / html_url / published_at / body） |
 | 当前版本号 | 安装包 `appVersion` | 桌面壳注入 `window.bempdiff.appVersion`；无则取前端内置 `APP_VERSION` |
-| 仓库地址 | 默认 `wangnan05563/bempDiff`，可用环境变量 `BEMPDIFF_GITHUB_REPO` 覆盖 | 仓库地址不算凭证，允许内置默认并带覆盖 |
+| 仓库地址 | 默认 `wangnan05563/BempDiff`，可用环境变量 `BEMPDIFF_GITHUB_REPO` 覆盖 | 仓库地址不算凭证，允许内置默认并带覆盖 |
 | 访问令牌 | 应用「关于」页「GitHub 访问令牌」（推荐）或环境变量 `GITHUB_TOKEN` | 仅私有仓库 / 规避匿名限流时提供；「关于」页勾选「记住令牌」才明文落盘 |
 
 工具**不允许**通过特殊分支或本地文件判断版本，统一以 GitHub Releases 为准，避免分支与发布状态不一致。为避免频繁检查触发限流，后端对同一仓库的拉取结果有 5 分钟进程内缓存，命中时「关于」页会提示「本次为缓存结果」。

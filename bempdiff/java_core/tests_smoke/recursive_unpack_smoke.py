@@ -3,7 +3,8 @@
 # 覆盖 顶层归档展开 / 内部 class 反编译 / 内部文本 diff / 嵌套 zip 递归展开。
 import io, os, socket, subprocess, sys, time, urllib.request, urllib.error, zipfile, json, shutil, tempfile
 
-ROOT = r"D:\code\otherProjects\18_comparePakage"
+# 脚本所在 tests_smoke → java_core → bempdiff → 项目根
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 JAVA = os.path.join(ROOT, "bempdiff", "toolchain", "zulu21.52.15-ca-jdk21.0.12-win_x64", "bin", "java.exe")
 JAVAC = os.path.join(ROOT, "bempdiff", "toolchain", "zulu21.52.15-ca-jdk21.0.12-win_x64", "bin", "javac.exe")
 CFR = os.path.join(ROOT, "bempdiff", "cfr.jar")

@@ -1,8 +1,8 @@
 # BempDiff
 
 [![许可证](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![最新版本](https://img.shields.io/github/v/release/wangnan05563/bempDiff.svg)](https://github.com/wangnan05563/bempDiff/releases/latest)
-[![支持平台](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)](https://github.com/wangnan05563/bempDiff/releases)
+[![最新版本](https://img.shields.io/github/v/release/wangnan05563/BempDiff.svg)](https://github.com/wangnan05563/BempDiff/releases/latest)
+[![支持平台](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)](https://github.com/wangnan05563/BempDiff/releases)
 
 ![BempDiff — Java 交付物（war / jar / zip / 文件夹）差异化对比与 AI 分析桌面工具](bempdiff/assets/social-preview-1280x640.png)
 
@@ -136,7 +136,7 @@ BempDiff 把这件事变成一次拖拽：自动逐层解包 → 按业务重要
 
 ## 安装
 
-到 [Releases](https://github.com/wangnan05563/bempDiff/releases) 下载对应平台安装包。
+到 [Releases](https://github.com/wangnan05563/BempDiff/releases) 下载对应平台安装包。
 
 | 平台 | 产物 | 状态 |
 |---|---|---|
@@ -205,7 +205,7 @@ java -cp dist_input/classes com.bempdiff.Main <子命令> ...
 - **比对**：内部包前缀（L1 展开规则）、忽略规则、嵌套解包深度与线程数、空白 / 注释归一化。
 - **AI**：服务商、Base URL、模型、API Key（掩码显示，默认不落盘）、代理、成本闸门阈值、单次输入 / 输出 token 上限、连接测试。
 - **界面**：明暗主题、强调色、语法高亮主题、语言（中 / 英）、差异树过滤、启动图。
-- **更新检查**：**关于 → 检查更新**读取 GitHub 最新 Release（默认仓库 `wangnan05563/bempDiff`，可用 `BEMPDIFF_GITHUB_REPO` 覆盖；私有仓库或触发匿名限流时，可在关于页填 GitHub 令牌或设 `GITHUB_TOKEN`），详见 [`docs/GitHub更新手册.md`](docs/GitHub更新手册.md)。
+- **更新检查**：**关于 → 检查更新**读取 GitHub 最新 Release（默认仓库 `wangnan05563/BempDiff`，可用 `BEMPDIFF_GITHUB_REPO` 覆盖；私有仓库或触发匿名限流时，可在关于页填 GitHub 令牌或设 `GITHUB_TOKEN`），详见 [`docs/GitHub更新手册.md`](docs/GitHub更新手册.md)。
 
 客户端偏好（忽略规则、语言、已审阅标记）存在浏览器 `localStorage`，不出本机。
 

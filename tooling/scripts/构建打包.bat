@@ -14,7 +14,7 @@ echo ============================================
 echo   BempDiff Build (Electron + Web UI + Java sidecar)
 echo ============================================
 echo Steps: check java artifacts -^> install builder -^> build webui -^> electron-builder [NSIS]
-echo Output: release\BempDiff-*-setup.exe  (project root 18_comparePakage\release)
+echo Output: release\BempDiff-*-setup.exe  (project root release)
 echo.
 
 REM ---------- 0. Version bump: unique patch = (yyyyMMdd).(daily seq), written to root package.json.

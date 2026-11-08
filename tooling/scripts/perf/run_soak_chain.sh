@@ -2,7 +2,8 @@
 # 压力阶梯之后的一条链：补充轮重跑（JTL 命名修复后）-> 重启隔离环境 -> 4 小时 Soak。
 # 串成一个后台脚本，避免分段被外部关停打断；每步落日志，退出码不靠通知里的汇总。
 set -uo pipefail
-cd "D:/code/otherProjects/18_comparePakage" || exit 1
+# 项目根由脚本位置推导（tooling/scripts/perf → 上三级），避免目录迁移后失效
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.." || exit 1
 LOG="E:/qoder-perf/env/logs/soak-chain.log"
 PY="python -X utf8"
 

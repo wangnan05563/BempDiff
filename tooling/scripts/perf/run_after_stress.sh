@@ -2,7 +2,8 @@
 # 压力阶梯跑完后自动接上：大包导出夹具 -> 补充轮（破坏性/外呼端点阶梯）。
 # 串成一个后台脚本以免中途被外部关停打断；每一步都落日志，便于追溯。
 set -uo pipefail
-cd "D:/code/otherProjects/18_comparePakage" || exit 1
+# 项目根由脚本位置推导（tooling/scripts/perf → 上三级），避免目录迁移后失效
+cd "$(dirname "${BASH_SOURCE[0]}")/../../.." || exit 1
 LOG="E:/qoder-perf/env/logs/after-stress.log"
 SUMMARY="tooling/jmeter/results/perf-2026-11-01/load/stress/summary.json"
 
