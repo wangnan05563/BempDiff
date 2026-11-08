@@ -1,5 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
+chcp 65001 >nul
+REM 本文件为 UTF-8 无 BOM；切到 65001 代码页，避免中文注释/提示在默认 GBK 代码页下乱码
 REM ============================================================
 REM BempDiff 一键构建打包 + 发布 GitHub Release
 REM ------------------------------------------------------------
