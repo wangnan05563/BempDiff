@@ -42,10 +42,13 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -270,15 +273,23 @@ public final class BempServer {
 
     /** 流式下发文件（zip 等大文件）：逐块写，避免整文件读入内存导致大响应体传输中断/断连。 */
     private static void sendFile(HttpExchange ex, int code, String mime, Path file) throws IOException {
-        addCors(ex);
-        long size = Files.size(file);
-        ex.getResponseHeaders().add(HDR_CONTENT_TYPE, mime);
-        ex.getResponseHeaders().add("Content-Disposition", "attachment");
-        ex.sendResponseHeaders(code, size);
-        byte[] buf = new byte[64 * 1024];
-        try (InputStream in = Files.newInputStream(file); OutputStream os = ex.getResponseBody()) {
-            int n;
-            while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+        // 先打开句柄再取长度：若清理线程恰好删除该文件，已打开的句柄在 Windows/POSIX 上仍能读到最后，
+        // 避免「已声明 Content-Length、打开时文件却不存在」导致客户端等满 60s。
+        try (FileChannel ch = FileChannel.open(file, StandardOpenOption.READ)) {
+            long size = ch.size();
+            addCors(ex);
+            ex.getResponseHeaders().add(HDR_CONTENT_TYPE, mime);
+            ex.getResponseHeaders().add("Content-Disposition", "attachment");
+            ex.sendResponseHeaders(code, size);
+            byte[] buf = new byte[64 * 1024];
+            try (InputStream in = Channels.newInputStream(ch); OutputStream os = ex.getResponseBody()) {
+                int n;
+                while ((n = in.read(buf)) > 0) os.write(buf, 0, n);
+            } catch (IOException e) {
+                // 响应头已发出，无法再补发错误体；关闭固定长度流会让 HttpServer 直接断连
+                //（而不是让客户端挂到 60s）。只记录，不向上抛给调用方触发 sendError。
+                LOG.log(Level.FINE, "sendFile 传输中断: " + file, e);
+            }
         }
     }
 
@@ -1895,6 +1906,12 @@ public final class BempServer {
 
     // ---------------- 临时文件清理（手动 + 退出兜底） ----------------
 
+    /**
+     * 清理跳过最近 30s 内仍有变动的临时文件/目录：它们可能正在被解包、导出或下发，
+     * 立即删除会截断进行中的响应（声明了 Content-Length 却读不到数据 → 客户端挂到 60s）。
+     */
+    private static final long CLEANUP_FRESH_MS = 30_000;
+
     /** 清理结果（供 API 返回）。 */
     public static final class CleanupResult {
         public final long freedBytes;
@@ -1932,8 +1949,8 @@ public final class BempServer {
 
     /**
      * GET /api/admin/diag-bundle：FR-011 一键导出脱敏诊断包（环境信息 + 脱敏日志 zip）。
-     * 包体 <5MB（DiagBundle 内护栏），生成到系统临时目录（bempdiff- 前缀，退出 hook 可回收），
-     * 流式下发后立即删除临时文件。
+     * 包体 <5MB（DiagBundle 内护栏），生成到系统临时目录下的专属子目录（bmddiag- 前缀，
+     * 不进入 cleanupTempFiles 的 bempdiff-* 白名单），流式下发后立即删除。
      */
     private void handleDiagBundle(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals(M_OPTIONS)) {
@@ -1944,9 +1961,15 @@ public final class BempServer {
             sendError(ex, 405, "仅支持 GET");
             return;
         }
-        Path zip = null;
+        Path work = null;
         try {
-            zip = DiagBundle.build(Paths.get(System.getProperty("java.io.tmpdir", ".")));
+            Path osTemp = Paths.get(System.getProperty("java.io.tmpdir", "."));
+            // 诊断包与 cleanupTempFiles 共用系统临时目录，但清理会递归回收 bempdiff-* 前缀；
+            // 若 zip 直接落在临时目录根，自动清理可能删掉正在下发的文件（Content-Length 无法
+            // 满足 → 客户端挂到 60s 超时）。放进非 bempdiff- 前缀的专属子目录，清理不会命中，
+            // 由 finally 在响应结束后整体回收。
+            work = Files.createTempDirectory(osTemp, "bmddiag-");
+            Path zip = DiagBundle.build(work);
             ex.getResponseHeaders().add("Content-Disposition",
                     "attachment; filename=\"bempdiff-diag-"
                             + java.time.LocalDate.now() + ".zip\"");
@@ -1959,10 +1982,8 @@ public final class BempServer {
                 sendError(ex, 500, "诊断包生成失败: " + e.getMessage());
             }
         } finally {
-            // 临时 zip 下发完即回收，不依赖退出 hook（诊断包生成频率低，泄漏可忽略但即时删更干净）
-            if (zip != null) {
-                try { Files.deleteIfExists(zip); } catch (IOException ignore) { /* 最佳努力 */ }
-            }
+            // zip 随专属目录一并回收，不依赖退出 hook
+            deleteTree(work);
         }
     }
 
@@ -1995,6 +2016,8 @@ public final class BempServer {
             for (Path p : (Iterable<Path>) s::iterator) {
                 String n = p.getFileName().toString();
                 if (!n.startsWith("bempdiff-")) continue; // 白名单前缀，防误删
+                // 刚创建/刚写入的产物可能仍被解包或下发流程持有，跳过留给下一轮清理。
+                if (System.currentTimeMillis() - lastModifiedMs(p) < CLEANUP_FRESH_MS) continue;
                 // 目录统一按 bempdiff- 前缀回收。此前仅认 bempdiff-unpack-*，会漏掉测试残留的
                 // bempdiff-folderdiff/logs/ut、解包目录 bempdiff-unpack<随机>(createTempDirectory
                 // 前缀无连字符) 等本工具临时产物；前缀白名单已保证只动 BempDiff 自己的目录。
