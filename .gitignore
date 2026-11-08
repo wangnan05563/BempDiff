@@ -229,3 +229,6 @@ bempdiff/java_core/*-ci-report.md
 .project
 .classpath
 .settings/
+
+# ---------- 发布说明 ----------
+release-notes-*.md

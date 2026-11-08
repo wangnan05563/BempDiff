@@ -1,26 +1,26 @@
 @echo off
 setlocal enabledelayedexpansion
 REM ============================================================
-REM BempDiff Ò»¼ü¹¹½¨´ò°ü + ·¢²¼ GitHub Release
+REM BempDiff ä¸€é”®æ„å»ºæ‰“åŒ… + å‘å¸ƒ GitHub Release
 REM ------------------------------------------------------------
-REM Á÷³Ì£º
-REM   1) °²×°ÒÀÀµ£¨bempdiff / webui / dev-shell£©
-REM   2) ×é×° dist_input£¨±àÒë jar + jlink ×îĞ¡ JRE + vite ¹¹½¨Ç°¶Ë²¢¾µÏñ£©
-REM   3) electron-builder ´ò NSIS °²×°°ü£¨x64£¬Êä³öµ½²Ö¿â¸ù release/£©
-REM   4) ¶ÁÈ¡ËµÃ÷ md£¨release-notes-<°æ±¾>.md£¬È±Ê¡ÓÃ git log ×Ô¶¯Éú³É£©
-REM      µ÷ÓÃ publish-release.py ´´½¨ Release + ÉÏ´«°²×°°ü×Ê²ú
+REM æµç¨‹ï¼š
+REM   1) å®‰è£…ä¾èµ–ï¼ˆbempdiff / webui / dev-shellï¼‰
+REM   2) ç»„è£… dist_inputï¼ˆç¼–è¯‘ jar + jlink æœ€å° JRE + vite æ„å»ºå‰ç«¯å¹¶é•œåƒï¼‰
+REM   3) electron-builder æ‰“ NSIS å®‰è£…åŒ…ï¼ˆx64ï¼Œè¾“å‡ºåˆ°ä»“åº“æ ¹ release/ï¼‰
+REM   4) è¯»å–è¯´æ˜ mdï¼ˆrelease-notes-<ç‰ˆæœ¬>.mdï¼Œç¼ºçœç”¨ git log è‡ªåŠ¨ç”Ÿæˆï¼‰
+REM      è°ƒç”¨ publish-release.py åˆ›å»º Release + ä¸Šä¼ å®‰è£…åŒ…èµ„äº§
 REM
-REM ÓÃ·¨£ºÔÚ tooling/scripts Ä¿Â¼Ë«»÷£¬»òÔÚ²Ö¿â¸ùÖ´ĞĞ
-REM         tooling\scripts\Ò»¼ü·¢²¼.bat
+REM ç”¨æ³•ï¼šåœ¨ tooling/scripts ç›®å½•åŒå‡»ï¼Œæˆ–åœ¨ä»“åº“æ ¹æ‰§è¡Œ
+REM         tooling\scripts\ä¸€é”®å‘å¸ƒ.bat
 REM
-REM °²È«ÊÔÔËĞĞ£¨½ö¹¹½¨ + ´òÓ¡½«Òª·¢²¼µÄ¶¯×÷£¬²»ÕæÕı·¢µ½ GitHub£©£º
-REM         set GH_DRY_RUN=1 && tooling\scripts\Ò»¼ü·¢²¼.bat
+REM å®‰å…¨è¯•è¿è¡Œï¼ˆä»…æ„å»º + æ‰“å°å°†è¦å‘å¸ƒçš„åŠ¨ä½œï¼Œä¸çœŸæ­£å‘åˆ° GitHubï¼‰ï¼š
+REM         set GH_DRY_RUN=1 && tooling\scripts\ä¸€é”®å‘å¸ƒ.bat
 REM
-REM Ç°ÖÃ£ºNode + npm¡¢JDK21£¨build_dist_input.ps1 ×Ô¶¯Ì½²â zulu/±¾»ú JDK£©¡¢
-REM       git£¨ÓÃÓÚÍÆ¶Ï²Ö¿â/±êÇ©/·ÖÖ§£¬²¢´Ó git Æ¾¾İ¿âÈ¡ github.com ÁîÅÆ£©
+REM å‰ç½®ï¼šNode + npmã€JDK21ï¼ˆbuild_dist_input.ps1 è‡ªåŠ¨æ¢æµ‹ zulu/æœ¬æœº JDKï¼‰ã€
+REM       gitï¼ˆç”¨äºæ¨æ–­ä»“åº“/æ ‡ç­¾/åˆ†æ”¯ï¼Œå¹¶ä» git å‡­æ®åº“å– github.com ä»¤ç‰Œï¼‰
 REM ============================================================
 
-REM ---------- Â·¾¶ ----------
+REM ---------- è·¯å¾„ ----------
 set "SCRIPT_DIR=%~dp0"
 set "REPO_ROOT=%SCRIPT_DIR%..\.."
 for %%I in ("%REPO_ROOT%") do set "REPO_ROOT=%%~fI"
@@ -28,83 +28,83 @@ set "BEMPDIFF=%REPO_ROOT%\bempdiff"
 set "RELEASE_DIR=%REPO_ROOT%\release"
 set "PUBLISH_PY=%REPO_ROOT%\tooling\scripts\publish-release.py"
 
-REM ---------- Python ¿ÉÖ´ĞĞ£¨ÓÅÏÈ python£¬·ñÔò python3£©----------
+REM ---------- Python å¯æ‰§è¡Œï¼ˆä¼˜å…ˆ pythonï¼Œå¦åˆ™ python3ï¼‰----------
 set "PYEXE=python"
 where python >nul 2>nul || set "PYEXE=python3"
 
-REM ---------- Electron ¹úÄÚ¾µÏñ£¨ÌáÉıÏÂÔØ³É¹¦ÂÊ£»¾³Íâ»úÆ÷¿ÉÉ¾³ıÕâÁ½ĞĞ£©----------
+REM ---------- Electron å›½å†…é•œåƒï¼ˆæå‡ä¸‹è½½æˆåŠŸç‡ï¼›å¢ƒå¤–æœºå™¨å¯åˆ é™¤è¿™ä¸¤è¡Œï¼‰----------
 set "ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/"
 set "ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/"
 
 cd /d "%REPO_ROOT%"
 
-REM ============ 1) °²×°ÒÀÀµ ============
-echo [1/4] °²×°ÒÀÀµ£¨bempdiff / webui / dev-shell£©...
+REM ============ 1) å®‰è£…ä¾èµ– ============
+echo [1/4] å®‰è£…ä¾èµ–ï¼ˆbempdiff / webui / dev-shellï¼‰...
 cd /d "%BEMPDIFF%"
 call npm install --no-audit --no-fund
-if errorlevel 1 ( echo [Ê§°Ü] bempdiff ÒÀÀµ°²×°Ê§°Ü & exit /b 1 )
+if errorlevel 1 ( echo [å¤±è´¥] bempdiff ä¾èµ–å®‰è£…å¤±è´¥ & exit /b 1 )
 call npm --prefix webui install --no-audit --no-fund
-if errorlevel 1 ( echo [Ê§°Ü] webui ÒÀÀµ°²×°Ê§°Ü & exit /b 1 )
+if errorlevel 1 ( echo [å¤±è´¥] webui ä¾èµ–å®‰è£…å¤±è´¥ & exit /b 1 )
 call npm --prefix dev-shell install --no-audit --no-fund
-if errorlevel 1 ( echo [Ê§°Ü] dev-shell ÒÀÀµ°²×°Ê§°Ü & exit /b 1 )
+if errorlevel 1 ( echo [å¤±è´¥] dev-shell ä¾èµ–å®‰è£…å¤±è´¥ & exit /b 1 )
 
-REM ============ 2) ×é×° dist_input£¨±àÒë jar + jlink JRE + Ç°¶Ë£© ============
-echo [2/4] ×é×° dist_input£¨±àÒë jar + jlink ×îĞ¡ JRE + ¹¹½¨Ç°¶Ë£©...
+REM ============ 2) ç»„è£… dist_inputï¼ˆç¼–è¯‘ jar + jlink JRE + å‰ç«¯ï¼‰ ============
+echo [2/4] ç»„è£… dist_inputï¼ˆç¼–è¯‘ jar + jlink æœ€å° JRE + æ„å»ºå‰ç«¯ï¼‰...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%BEMPDIFF%\scripts\build_dist_input.ps1"
-if errorlevel 1 ( echo [Ê§°Ü] ×é×° dist_input Ê§°Ü£¬ÖÕÖ¹·¢²¼ & exit /b 1 )
+if errorlevel 1 ( echo [å¤±è´¥] ç»„è£… dist_input å¤±è´¥ï¼Œç»ˆæ­¢å‘å¸ƒ & exit /b 1 )
 
-REM ============ 3) electron-builder ´ò NSIS °²×°°ü£¨x64£© ============
-echo [3/4] electron-builder ´ò NSIS °²×°°ü£¨x64£©...
-REM ³ö°üÇ°Çåµô¾É setup / blockmap£¬±ÜÃâ stale »ò output-locked Âä½ø _bk Ä¿Â¼
+REM ============ 3) electron-builder æ‰“ NSIS å®‰è£…åŒ…ï¼ˆx64ï¼‰ ============
+echo [3/4] electron-builder æ‰“ NSIS å®‰è£…åŒ…ï¼ˆx64ï¼‰...
+REM å‡ºåŒ…å‰æ¸…æ‰æ—§ setup / blockmapï¼Œé¿å… stale æˆ– output-locked è½è¿› _bk ç›®å½•
 if exist "%RELEASE_DIR%" (
   for %%f in ("%RELEASE_DIR%\BempDiff-*-setup.exe" "%RELEASE_DIR%\BempDiff-*-setup.blockmap") do del /q "%%f" >nul 2>&1
 )
 cd /d "%BEMPDIFF%"
 call npm run dist
-if errorlevel 1 ( echo [Ê§°Ü] electron-builder ´ò°üÊ§°Ü£¬ÖÕÖ¹·¢²¼ & exit /b 1 )
+if errorlevel 1 ( echo [å¤±è´¥] electron-builder æ‰“åŒ…å¤±è´¥ï¼Œç»ˆæ­¢å‘å¸ƒ & exit /b 1 )
 
-REM ============ 4) ¶¨Î»°²×°°ü + Éú³ÉËµÃ÷ + ·¢²¼ ============
-echo [4/4] ¶¨Î»°²×°°ü + ËµÃ÷ + ·¢²¼µ½ GitHub Releases...
-REM ÕÒ×îĞÂÉú³ÉµÄ·Ç arm64 µÄ x64 setup£¨°´ĞŞ¸ÄÊ±¼äµ¹ĞòÈ¡µÚÒ»¸ö£©
+REM ============ 4) å®šä½å®‰è£…åŒ… + ç”Ÿæˆè¯´æ˜ + å‘å¸ƒ ============
+echo [4/4] å®šä½å®‰è£…åŒ… + è¯´æ˜ + å‘å¸ƒåˆ° GitHub Releases...
+REM æ‰¾æœ€æ–°ç”Ÿæˆçš„é arm64 çš„ x64 setupï¼ˆæŒ‰ä¿®æ”¹æ—¶é—´å€’åºå–ç¬¬ä¸€ä¸ªï¼‰
 set "SETUP_EXE="
 for /f "delims=" %%f in ('dir /b /o:-d "%RELEASE_DIR%\BempDiff-*-setup.exe" 2^>nul ^| findstr /v /i "arm64"') do (
   if not defined SETUP_EXE set "SETUP_EXE=%RELEASE_DIR%\%%f"
 )
-if not defined SETUP_EXE ( echo [Ê§°Ü] Î´ÕÒµ½Éú³ÉµÄ BempDiff-*-setup.exe£¨release Ä¿Â¼£©& exit /b 1 )
+if not defined SETUP_EXE ( echo [å¤±è´¥] æœªæ‰¾åˆ°ç”Ÿæˆçš„ BempDiff-*-setup.exeï¼ˆrelease ç›®å½•ï¼‰& exit /b 1 )
 
-REM ´ÓÎÄ¼şÃûÍÆµ¼°æ±¾ºÅ£¨BempDiff-<°æ±¾>-setup.exe -> <°æ±¾>£©
+REM ä»æ–‡ä»¶åæ¨å¯¼ç‰ˆæœ¬å·ï¼ˆBempDiff-<ç‰ˆæœ¬>-setup.exe -> <ç‰ˆæœ¬>ï¼‰
 for %%f in ("%SETUP_EXE%") do set "BASENAME=%%~nf"
 set "VER="
 for /f "tokens=2 delims=-" %%v in ("%BASENAME%") do set "VER=%%v"
-if not defined VER ( echo [Ê§°Ü] ÎŞ·¨´ÓÎÄ¼şÃûÍÆµ¼°æ±¾£º%BASENAME% & exit /b 1 )
-echo   °²×°°ü: %SETUP_EXE%
-echo   °æ±¾  : %VER%
+if not defined VER ( echo [å¤±è´¥] æ— æ³•ä»æ–‡ä»¶åæ¨å¯¼ç‰ˆæœ¬ï¼š%BASENAME% & exit /b 1 )
+echo   å®‰è£…åŒ…: %SETUP_EXE%
+echo   ç‰ˆæœ¬  : %VER%
 
-REM ËµÃ÷ÎÄ¼ş£ºÓÅÏÈ release-notes-<VER>.md£¬·ñÔòÓÃ git log ×Ô¶¯Éú³É
+REM è¯´æ˜æ–‡ä»¶ï¼šä¼˜å…ˆ release-notes-<VER>.mdï¼Œå¦åˆ™ç”¨ git log è‡ªåŠ¨ç”Ÿæˆ
 set "NOTES=%REPO_ROOT%\release-notes-%VER%.md"
 if not exist "%NOTES%" (
-  echo   Î´ÕÒµ½ %NOTES%£¬ÓÃ git log ×Ô¶¯Éú³ÉËµÃ÷...
+  echo   æœªæ‰¾åˆ° %NOTES%ï¼Œç”¨ git log è‡ªåŠ¨ç”Ÿæˆè¯´æ˜...
   set "NOTES=%REPO_ROOT%\release-notes-%VER%.auto.md"
   (
     echo # BempDiff %VER%
     echo.
-    echo ×Ô¶¯Éú³ÉµÄ·¢²¼ËµÃ÷£¨À´×Ô git Ìá½»¼ÇÂ¼£¬½¨ÒéÊ¹ÓÃÇ°Ìæ»»ÎªÕıÊ½ËµÃ÷£©£º
+    echo è‡ªåŠ¨ç”Ÿæˆçš„å‘å¸ƒè¯´æ˜ï¼ˆæ¥è‡ª git æäº¤è®°å½•ï¼Œå»ºè®®ä½¿ç”¨å‰æ›¿æ¢ä¸ºæ­£å¼è¯´æ˜ï¼‰ï¼š
     echo.
     git -C "%REPO_ROOT%" log --no-merges --oneline -20 2>nul
   ) > "%NOTES%"
 )
-echo   ËµÃ÷  : %NOTES%
+echo   è¯´æ˜  : %NOTES%
 
-if defined GH_DRY_RUN ( echo   [DRY-RUN] ²»»áÕæÕı´´½¨ Release / ÉÏ´«×Ê²ú)
+if defined GH_DRY_RUN ( echo   [DRY-RUN] ä¸ä¼šçœŸæ­£åˆ›å»º Release / ä¸Šä¼ èµ„äº§)
 
-REM ÏÔÊ½°Ñ°æ±¾ºÅÉèÎª Release ±êÇ©£¨²»ÒÀÀµ²Ö¿âÊÇ·ñ´òÁË git tag£©
+REM æ˜¾å¼æŠŠç‰ˆæœ¬å·è®¾ä¸º Release æ ‡ç­¾ï¼ˆä¸ä¾èµ–ä»“åº“æ˜¯å¦æ‰“äº† git tagï¼‰
 set "GH_TAG=%VER%"
 
-REM ·¢²¼£¨token ÓÉ publish-release.py ×Ô¶¯´Ó git Æ¾¾İ¿â¶ÁÈ¡£©
+REM å‘å¸ƒï¼ˆtoken ç”± publish-release.py è‡ªåŠ¨ä» git å‡­æ®åº“è¯»å–ï¼‰
 "%PYEXE%" "%PUBLISH_PY%" "%SETUP_EXE%" "%NOTES%" "BempDiff-%VER%-setup.exe"
-if errorlevel 1 ( echo [Ê§°Ü] ·¢²¼Ê§°Ü£¬Çë¼ì²éÍøÂç / git Æ¾¾İ¿âÖĞµÄ github.com ÁîÅÆ & exit /b 1 )
+if errorlevel 1 ( echo [å¤±è´¥] å‘å¸ƒå¤±è´¥ï¼Œè¯·æ£€æŸ¥ç½‘ç»œ / git å‡­æ®åº“ä¸­çš„ github.com ä»¤ç‰Œ & exit /b 1 )
 
 echo.
-echo [Íê³É] Ò»¼ü·¢²¼½áÊø£º%SETUP_EXE%
-if not defined GH_DRY_RUN echo   Release: https://github.com/wangnan05563/bempDiff/releases/tag/%VER%
+echo [å®Œæˆ] ä¸€é”®å‘å¸ƒç»“æŸï¼š%SETUP_EXE%
+if not defined GH_DRY_RUN echo   Release: https://github.com/wangnan05563/BempDiff/releases/tag/%VER%
 endlocal

@@ -1,6 +1,6 @@
 {
   "name": "bempdiff",
-  "version": "0.1.2026102201",
+  "version": "0.1.2026110501",
   "private": true,
   "description": "BempDiff 桌面应用根（Electron 桌面壳 + Web 前端 + Java 后端 sidecar）",
   "scripts": {

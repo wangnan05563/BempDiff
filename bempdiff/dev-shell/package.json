@@ -1,6 +1,6 @@
 {
   "name": "bempdiff-dev-shell",
-  "version": "0.1.2026102201",
+  "version": "0.1.2026110501",
   "private": true,
   "description": "BempDiff 开发态 Electron 桌面壳：原生窗口加载 vite 开发服务器 (或已构建 SPA)，不依赖浏览器。生产打包复用 electron-builder。",
   "main": "main.js",
