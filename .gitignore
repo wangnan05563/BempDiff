@@ -218,9 +218,8 @@ bempdiff/java_core/dev_classes/
 # 此处补充 dist_exe 解压中间态
 bempdist/dist_exe/
 
-# ---------- CI/CD 报告与审计产物 ----------
-bempdiff/*-ci-report.md
-bempdiff/java_core/*-ci-report.md
+# ---------- CI/CD 报告与审计产物（运行产物，仓库任意层级均忽略） ----------
+*-ci-report.md
 
 # ---------- IDE 配置文件（补充 JetBrains 全家桶） ----------
 *.swp
