@@ -22,11 +22,11 @@ SRC = "bempdiff/lib_v1.jar"
 
 
 def build_lib_jars():
-    """lib_v1.jar 由 java_core/out_perf（或 out）编译产物打包；lib_v2 确定性替换 12%。"""
+    """lib_v1.jar 由 release/java_core/out_perf（或 out）编译产物打包；lib_v2 确定性替换 12%。"""
     entries = []
-    src_dir = "bempdiff/java_core/out_perf"
+    src_dir = "release/java_core/out_perf"
     if not os.path.isdir(src_dir):
-        src_dir = "bempdiff/java_core/out"
+        src_dir = "release/java_core/out"
     for dp, _, fns in os.walk(src_dir):
         for fn in fns:
             if fn.endswith(".class"):

@@ -10,8 +10,8 @@ RELEASE_FLAG=""
 # 工具链缺失（bin 被清空等）时回退打包快照内的 JDK（dist_input/jre 为完整 JDK，含 javac），
 # 用 --release 21 保证字节码与 Zulu21 产物一致（虚拟线程 API JDK21 已 finalized，25 编译兼容）。
 if [ ! -f "$JAVAC" ]; then
-  JAVAC="$ROOT/bempdiff/dist_input/jre/bin/javac.exe"
-  JAVA="$ROOT/bempdiff/dist_input/jre/bin/java.exe"
+  JAVAC="$ROOT/release/dist_input/jre/bin/javac.exe"
+  JAVA="$ROOT/release/dist_input/jre/bin/java.exe"
   RELEASE_FLAG="--release 21"
   echo "[WARN] Zulu21 工具链缺失，回退 dist_input/jre (JDK25) + --release 21"
 fi
@@ -20,8 +20,8 @@ CFR="$ROOT/bempdiff/cfr.jar"
 POI_LIBS="$ROOT/bempdiff/toolchain/lib/*"
 CORE_SRC="$ROOT/bempdiff/java_core/src"
 TEST_SRC="$ROOT/bempdiff/java_core/test"
-CORE_OUT="$ROOT/bempdiff/java_core/out"
-TEST_OUT="$ROOT/bempdiff/java_core/test_out"
+CORE_OUT="$ROOT/release/java_core/out"
+TEST_OUT="$ROOT/release/java_core/test_out"
 
 # safe-delete 沙箱会拦截 rm -rf（bulk 阈值 50）导致旧 class 残留，改用 find -delete 逐文件清理（空目录保留无害）
 find "$CORE_OUT" -type f -delete 2>/dev/null

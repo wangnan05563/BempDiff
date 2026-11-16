@@ -1,31 +1,32 @@
 ﻿<#
 .SYNOPSIS
   BempDiff 构建输入装配脚本：编译 java_core + 复制 cfr.jar + jlink 瘦 JRE + 构建前端，
-  统一产出 dist_input/{app,classes,jre,webui}。
+  统一产出 release/dist_input/{app,classes,jre,webui}。
+  仓库根 release/ 是全部可重建构建产物的唯一出口：删该目录即完成清理，重跑本脚本即重建。
 
 .DESCRIPTION
   Electron 桌面壳（唯一发布壳）与打包链路的共享装配步骤：
-  electron-builder 的 build.extraResources 直接消费 dist_input/{app,jre,webui}，
-  开发态 main.js 亦按 dist_input/classes 拼 classpath，因此 CI、一键发布、性能压测
+  electron-builder 的 build.extraResources 直接消费 release/dist_input/{app,jre,webui}，
+  开发态 main.js 亦按 release/dist_input/classes 拼 classpath，因此 CI、一键发布、性能压测
   都调用本脚本装配输入，再各自执行 electron-builder 打包。
 
   流程：
-    1. 编译 java_core → dist_input/app/bempdiff.jar（Main-Class=com.bempdiff.Main）
-    2. 复制 cfr.jar → dist_input/app/cfr.jar，并分发 toolchain/lib → dist_input/app/lib
-    3. jlink 最小 JRE（见 $Modules）→ dist_input/jre
-    4. 构建前端（vite build）→ webui/dist，并镜像到 dist_input/webui
+    1. 编译 java_core → release/dist_input/app/bempdiff.jar（Main-Class=com.bempdiff.Main）
+    2. 复制 cfr.jar → release/dist_input/app/cfr.jar，并分发 toolchain/lib → release/dist_input/app/lib
+    3. jlink 最小 JRE（见 $Modules）→ release/dist_input/jre
+    4. 构建前端（vite build）→ release/webui/dist，并镜像到 release/dist_input/webui
 
   需在本机运行（Node + JDK21）；产物就绪后由 electron-builder 出安装包。
 
 .PARAMETER SkipJava
-  跳过 jar/jre 重新编译（复用已有 dist_input/app、dist_input/jre）。
+  跳过 jar/jre 重新编译（复用已有 release/dist_input/app、release/dist_input/jre）。
 .PARAMETER SkipJre
-  仅跳过 jlink 重建 dist_input/jre（T01509：CI 全新检出必须编译 jar，
+  仅跳过 jlink 重建 release/dist_input/jre（T01509：CI 全新检出必须编译 jar，
   但要保住打包前 switch-jre.mjs 就位的预置 JRE，不被 jlink 覆盖）。
 .PARAMETER SkipFrontend
   跳过前端构建与镜像。
 .PARAMETER Clean
-  先清空 dist_input 与 jre 再开始。
+  先清空 release/dist_input 与 jre 再开始。
 #>
 # 注意：刻意不使用 [CmdletBinding()]。使用普通脚本 + 自动变量 $args 收集游离参数，
 # 可确保任何误传的位置参数（如 `构建打包.bat src` 漏进来的 `src`）只进 $args、不会触发
@@ -81,9 +82,11 @@ function Invoke-Native {
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Proto     = Split-Path -Parent $ScriptDir
+$Proto     = Split-Path -Parent $ScriptDir          # bempdiff/
+$Repo      = Split-Path -Parent $Proto              # 仓库根
+$Release   = Join-Path $Repo 'release'              # 可重建产物统一出口
 $Webui     = Join-Path $Proto 'webui'
-$DistInput = Join-Path $Proto 'dist_input'
+$DistInput = Join-Path $Release 'dist_input'
 $AppDir    = Join-Path $DistInput 'app'
 $JreOut    = Join-Path $DistInput 'jre'
 $Classes   = Join-Path $DistInput 'classes'
@@ -92,13 +95,16 @@ $CfrSrc    = Join-Path $Proto 'cfr.jar'
 $BempJar   = Join-Path $AppDir 'bempdiff.jar'
 $CfrJar    = Join-Path $AppDir 'cfr.jar'
 $JavaSrc   = Join-Path (Join-Path $Proto 'java_core') 'src'
-$WebuiDist = Join-Path $Webui 'dist'
+$WebuiDist = Join-Path (Join-Path $Release 'webui') 'dist'
 # 三方依赖 jar（目前为解析旧版二进制 .xls 的 Apache POI 及其传递依赖）：编译 classpath 与
 # 运行时 dist_input/app/lib 均来自此目录，桌面壳 main.js 按该目录拼服务端 classpath。
 $PoiLib    = Join-Path $Proto 'toolchain\lib'
 
 # 构建日志：所有原生命令输出按行追加于此，构建失败时可直接打开回溯真实报错。
-$BuildLog = Join-Path $Proto 'build_native.log'
+$BuildLog = Join-Path (Join-Path $Release 'logs') 'build_native.log'
+foreach ($d in @($Release, (Join-Path $Release 'logs'), (Join-Path $Release 'webui'))) {
+  New-Item -ItemType Directory -Force -Path $d | Out-Null
+}
 try { Set-Content -Path $BuildLog -Value ("=== BempDiff build @ " + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss') + " ===") -Encoding utf8 } catch {}
 
 # 最小 JRE 模块（jdeps 实测静态最小集为 java.base,java.logging,jdk.httpserver；

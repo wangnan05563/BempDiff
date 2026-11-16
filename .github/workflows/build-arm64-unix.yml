@@ -2,7 +2,7 @@
 # BempDiff — Linux / macOS arm64 产物构建 + 启动冒烟（T01546）
 # ------------------------------------------------------------
 # 同法推进自 build-arm64.yml（Windows arm64，T01509 Run#3 已全绿）：
-#   架构自证 → arm64 JRE 就位 → 编译组装 dist_input → electron-builder
+#   架构自证 → arm64 JRE 就位 → 编译组装 release/dist_input → electron-builder
 #   → 包内架构深校 → 安装/启动冒烟（sidecar 18765 监听）。
 #
 # 与 Windows 版的差异（都是有意的）：
@@ -82,27 +82,28 @@ jobs:
       - name: 构建 webui
         run: npm run build --prefix bempdiff/webui
 
-      - name: 拉取 linux_aarch64 JRE 并换入 dist_input/jre
+      - name: 拉取 linux_aarch64 JRE 并换入 release/dist_input/jre
         run: |
           node tooling/scripts/fetch-jre.mjs --os linux --arch arm64
-          rm -rf bempdiff/dist_input/jre
-          cp -a bempdiff/dist_input/jre-linux-arm64 bempdiff/dist_input/jre
-          file bempdiff/dist_input/jre/bin/java
-          file bempdiff/dist_input/jre/bin/java | grep -q 'ARM aarch64' || { echo 'JRE 非 aarch64'; exit 1; }
+          rm -rf release/dist_input/jre
+          cp -a release/dist_input/jre-linux-arm64 release/dist_input/jre
+          file release/dist_input/jre/bin/java
+          file release/dist_input/jre/bin/java | grep -q 'ARM aarch64' || { echo 'JRE 非 aarch64'; exit 1; }
 
-      - name: 组装 dist_input（等价 build_dist_input.ps1 的三步）
+      - name: 组装 release/dist_input（等价 build_dist_input.ps1 的三步）
         run: |
           set -euo pipefail
           B=bempdiff
-          rm -rf $B/dist_input/classes && mkdir -p $B/dist_input/classes $B/dist_input/app/lib
+          R=release
+          rm -rf $R/dist_input/classes && mkdir -p $R/dist_input/classes $R/dist_input/app/lib
           find $B/java_core/src -name '*.java' > /tmp/sources.txt
           javac -encoding UTF-8 -Xlint:-unchecked -cp "$B/cfr.jar:$B/toolchain/lib/*" \
-            -d $B/dist_input/classes @/tmp/sources.txt
-          jar cfe $B/dist_input/app/bempdiff.jar com.bempdiff.Main -C $B/dist_input/classes .
-          cp -f $B/cfr.jar $B/dist_input/app/cfr.jar
-          cp -f $B/toolchain/lib/*.jar $B/dist_input/app/lib/
-          rm -rf $B/dist_input/webui && cp -a $B/webui/dist $B/dist_input/webui
-          ls -la $B/dist_input/app
+            -d $R/dist_input/classes @/tmp/sources.txt
+          jar cfe $R/dist_input/app/bempdiff.jar com.bempdiff.Main -C $R/dist_input/classes .
+          cp -f $B/cfr.jar $R/dist_input/app/cfr.jar
+          cp -f $B/toolchain/lib/*.jar $R/dist_input/app/lib/
+          rm -rf $R/dist_input/webui && cp -a $R/webui/dist $R/dist_input/webui
+          ls -la $R/dist_input/app
 
       - name: electron-builder --linux --arm64（AppImage + deb）
         run: |
@@ -190,31 +191,32 @@ jobs:
       - name: 构建 webui
         run: npm run build --prefix bempdiff/webui
 
-      - name: 拉取 macosx_aarch64 JRE，扁平化 Contents/Home 后换入 dist_input/jre
+      - name: 拉取 macosx_aarch64 JRE，扁平化 Contents/Home 后换入 release/dist_input/jre
         run: |
           set -euo pipefail
           node tooling/scripts/fetch-jre.mjs --os macos --arch arm64
-          SRC=bempdiff/dist_input/jre-macos-arm64
+          SRC=release/dist_input/jre-macos-arm64
           [ -x "$SRC/Contents/Home/bin/java" ] || { echo 'mac 归档布局变化'; find $SRC -maxdepth 3 | head; exit 1; }
-          rm -rf bempdiff/dist_input/jre
-          mkdir -p bempdiff/dist_input/jre
-          cp -a "$SRC/Contents/Home/." bempdiff/dist_input/jre/
-          file bempdiff/dist_input/jre/bin/java
-          file bempdiff/dist_input/jre/bin/java | grep -q 'arm64' || { echo 'JRE 非 arm64'; exit 1; }
+          rm -rf release/dist_input/jre
+          mkdir -p release/dist_input/jre
+          cp -a "$SRC/Contents/Home/." release/dist_input/jre/
+          file release/dist_input/jre/bin/java
+          file release/dist_input/jre/bin/java | grep -q 'arm64' || { echo 'JRE 非 arm64'; exit 1; }
 
-      - name: 组装 dist_input（同 linux 作业三步）
+      - name: 组装 release/dist_input（同 linux 作业三步）
         run: |
           set -euo pipefail
           B=bempdiff
-          rm -rf $B/dist_input/classes && mkdir -p $B/dist_input/classes $B/dist_input/app/lib
+          R=release
+          rm -rf $R/dist_input/classes && mkdir -p $R/dist_input/classes $R/dist_input/app/lib
           find $B/java_core/src -name '*.java' > /tmp/sources.txt
           javac -encoding UTF-8 -Xlint:-unchecked -cp "$B/cfr.jar:$B/toolchain/lib/*" \
-            -d $B/dist_input/classes @/tmp/sources.txt
-          jar cfe $B/dist_input/app/bempdiff.jar com.bempdiff.Main -C $B/dist_input/classes .
-          cp -f $B/cfr.jar $B/dist_input/app/cfr.jar
-          cp -f $B/toolchain/lib/*.jar $B/dist_input/app/lib/
-          rm -rf $B/dist_input/webui && cp -a $B/webui/dist $B/dist_input/webui
-          chmod +x $B/dist_input/jre/bin/java $B/dist_input/jre/bin/* 2>/dev/null || true
+            -d $R/dist_input/classes @/tmp/sources.txt
+          jar cfe $R/dist_input/app/bempdiff.jar com.bempdiff.Main -C $R/dist_input/classes .
+          cp -f $B/cfr.jar $R/dist_input/app/cfr.jar
+          cp -f $B/toolchain/lib/*.jar $R/dist_input/app/lib/
+          rm -rf $R/dist_input/webui && cp -a $R/webui/dist $R/dist_input/webui
+          chmod +x $R/dist_input/jre/bin/java $R/dist_input/jre/bin/* 2>/dev/null || true
 
       - name: electron-builder --mac --arm64（dmg，identity:null 不签名）
         run: |

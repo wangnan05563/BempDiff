@@ -5,9 +5,9 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 CP=""
 DEPS=""
 # Published fat jar first (self-contained); dev classes need CFR + toolchain libs appended.
-if [ -f "$DIR/../dist_input/app/bempdiff.jar" ]; then CP="$DIR/../dist_input/app/bempdiff.jar"; fi
-if [ -z "$CP" ] && [ -f "$DIR/../java_core/out/com/bempdiff/Main.class" ]; then
-  CP="$DIR/../java_core/out"
+if [ -f "$DIR/../../release/dist_input/app/bempdiff.jar" ]; then CP="$DIR/../../release/dist_input/app/bempdiff.jar"; fi
+if [ -z "$CP" ] && [ -f "$DIR/../../release/java_core/out/com/bempdiff/Main.class" ]; then
+  CP="$DIR/../../release/java_core/out"
   DEPS=":$DIR/../cfr.jar:$DIR/../toolchain/lib/*"
 fi
 [ -n "$BEMPDIFF_JAR" ] && CP="$BEMPDIFF_JAR"

@@ -15,9 +15,9 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 JAVA = os.path.join(ROOT, "bempdiff", "toolchain", "zulu21.52.15-ca-jdk21.0.12-win_x64", "bin", "java.exe")
-OUT = os.path.join(ROOT, "bempdiff", "java_core", "out")
+OUT = os.path.join(ROOT, "release", "java_core", "out")
 CFR = os.path.join(ROOT, "bempdiff", "cfr.jar")
-DIST = os.path.join(ROOT, "bempdiff", "webui", "dist")
+DIST = os.path.join(ROOT, "release", "webui", "dist")
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 18799
 STOP = os.path.join(ROOT, "bempdiff", "java_core", "tests_smoke", "_uismoke_stop_%d" % PORT)
 TMPH = os.path.join(ROOT, "bempdiff", "java_core", "tests_smoke", "_uismoke_home_%d" % PORT)

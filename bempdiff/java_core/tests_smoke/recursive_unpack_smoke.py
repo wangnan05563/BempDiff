@@ -8,7 +8,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.a
 JAVA = os.path.join(ROOT, "bempdiff", "toolchain", "zulu21.52.15-ca-jdk21.0.12-win_x64", "bin", "java.exe")
 JAVAC = os.path.join(ROOT, "bempdiff", "toolchain", "zulu21.52.15-ca-jdk21.0.12-win_x64", "bin", "javac.exe")
 CFR = os.path.join(ROOT, "bempdiff", "cfr.jar")
-CORE_OUT = os.path.join(ROOT, "bempdiff", "java_core", "out")
+CORE_OUT = os.path.join(ROOT, "release", "java_core", "out")
 MAIN = "com.bempdiff.Main"
 
 def free_port():

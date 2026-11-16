@@ -27,6 +27,8 @@ Thumbs.db
 
 # Build outputs
 dist/
+# release/ = 全部可重复构建产物的统一出口（打包输入 dist_input、webui/dist、java_core/out|test_out、
+# jacoco、安装包…）。删该目录即完成清理，重建脚本会自动重建；见 tooling/scripts/clean-release.ps1
 release/
 build/
 out/

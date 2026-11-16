@@ -21,12 +21,13 @@ CFR="../cfr.jar"
 REPLAY="../java_core_ai_replay"
 OUT_MD="./demo_report.md"
 OUT_DIR="./demo_export"
+OUT="../../release/java_core/out"    # 编译产物统一落仓库根 release/
 
-# ---- 编译（out 不存在时） ----
-if [ ! -f out/com/bempdiff/Main.class ]; then
+# ---- 编译（release 内产物不存在时） ----
+if [ ! -f "$OUT"/com/bempdiff/Main.class ]; then
   echo "===== 编译 ====="
-  rm -rf out && mkdir -p out
-  "$JAVAC" -encoding UTF-8 -d out $(find src -name "*.java") || { echo "COMPILE FAILED"; exit 3; }
+  rm -rf "$OUT" && mkdir -p "$OUT"
+  "$JAVAC" -encoding UTF-8 -d "$OUT" $(find src -name "*.java") || { echo "COMPILE FAILED"; exit 3; }
 fi
 
 if [ ! -f "$LIBV1" ] || [ ! -f "$LIBV2" ]; then
@@ -36,7 +37,7 @@ fi
 CFR_ARG=""
 [ -f "$CFR" ] && CFR_ARG="--cfr $CFR"
 
-run(){ echo; echo "########## $1 ##########"; shift; "$JAVA" -cp out com.bempdiff.Main "$@"; }
+run(){ echo; echo "########## $1 ##########"; shift; "$JAVA" -cp "$OUT" com.bempdiff.Main "$@"; }
 
 run "1) INSPECT 真实双版本 jar" inspect "$LIBV2"
 run "2) COMPARE 全量差异"       compare "$LIBV1" "$LIBV2" --expand-all

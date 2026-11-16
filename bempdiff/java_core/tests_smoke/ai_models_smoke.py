@@ -18,7 +18,7 @@ import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 JAVA = os.path.join(ROOT, "bempdiff", "toolchain", "zulu21.52.15-ca-jdk21.0.12-win_x64", "bin", "java.exe")
-OUT = os.path.join(ROOT, "bempdiff", "java_core", "out")
+OUT = os.path.join(ROOT, "release", "java_core", "out")
 CFR = os.path.join(ROOT, "bempdiff", "cfr.jar")
 
 

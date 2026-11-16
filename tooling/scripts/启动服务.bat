@@ -30,8 +30,8 @@ echo [STEP 1/2] Checking Java runtime ...
 
 REM ---------- 1. Locate Java runtime (quick sanity check only) ----------
 set "JAVA="
-if exist "bempdiff\dist_input\jre\bin\java.exe" (
-  set "JAVA=bempdiff\dist_input\jre\bin\java.exe"
+if exist "release\dist_input\jre\bin\java.exe" (
+  set "JAVA=release\dist_input\jre\bin\java.exe"
 ) else (
   for /d %%d in ("bempdiff\toolchain\zulu21*") do (
     if not defined JAVA if exist "%%d\bin\java.exe" set "JAVA=%%d\bin\java.exe"

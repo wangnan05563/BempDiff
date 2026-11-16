@@ -29,21 +29,21 @@ if errorlevel 1 (
 echo [OK] Patch version bumped.
 
 REM ---------- 0. Prerequisite: Java backend artifacts ----------
-if not exist "dist_input\jre\bin\javaw.exe" (
-  echo "[ERROR] dist_input\jre not found - build the Java backend (javac/jar/cfr/jlink) beforehand"
+if not exist "..\release\dist_input\jre\bin\javaw.exe" (
+  echo "[ERROR] ..\release\dist_input\jre not found - build the Java backend (javac/jar/cfr/jlink) beforehand"
   pause
   exit /b 1
 )
-if not exist "dist_input\app\cfr.jar" (
-  echo "[ERROR] dist_input\app\cfr.jar not found - build the Java backend beforehand"
+if not exist "..\release\dist_input\app\cfr.jar" (
+  echo "[ERROR] ..\release\dist_input\app\cfr.jar not found - build the Java backend beforehand"
   pause
   exit /b 1
 )
 set "_has_backend=0"
-if exist "dist_input\classes" set "_has_backend=1"
-if exist "dist_input\app\bempdiff.jar" set "_has_backend=1"
+if exist "..\release\dist_input\classes" set "_has_backend=1"
+if exist "..\release\dist_input\app\bempdiff.jar" set "_has_backend=1"
 if "%_has_backend%"=="0" (
-  echo "[ERROR] No backend artifact (dist_input\classes or dist_input\app\bempdiff.jar) - build the Java backend beforehand"
+  echo "[ERROR] No backend artifact (..\release\dist_input\classes or ..\release\dist_input\app\bempdiff.jar) - build the Java backend beforehand"
   pause
   exit /b 1
 )
@@ -254,7 +254,7 @@ goto dist_verify
 REM ---------- 6. Sanity: packaged jar hash must match the freshly assembled jar ----------
 :dist_verify
 echo [STEP] Verifying packaged jar hash == fresh dist_input jar ...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='%CD%\%_outrel%\win-unpacked\resources\bempdiff\dist_input\app\bempdiff.jar'; $f='%CD%\dist_input\app\bempdiff.jar'; $hp=Get-FileHash $p -ErrorAction SilentlyContinue; $hf=Get-FileHash $f -ErrorAction SilentlyContinue; if($hp -and $hf -and $hp.Hash -eq $hf.Hash){ echo [OK] packaged jar matches fresh build } else { echo [ERROR] packaged jar is STALE/differs - do NOT distribute this installer; exit 1 }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='%CD%\%_outrel%\win-unpacked\resources\bempdiff\dist_input\app\bempdiff.jar'; $f='%CD%\..\release\dist_input\app\bempdiff.jar'; $hp=Get-FileHash $p -ErrorAction SilentlyContinue; $hf=Get-FileHash $f -ErrorAction SilentlyContinue; if($hp -and $hf -and $hp.Hash -eq $hf.Hash){ echo [OK] packaged jar matches fresh build } else { echo [ERROR] packaged jar is STALE/differs - do NOT distribute this installer; exit 1 }"
 if errorlevel 1 (
   echo [ERROR] Stale jar detected in installer - build aborted
   pause
@@ -267,7 +267,7 @@ REM      (>=50MB rule); warns loudly on the stale-root scenario so nobody picks 
 REM   2) Compare packaged win-unpacked webui index.html bundle hashes vs source dist_input webui
 REM      (guards "packaged OK but ships an old frontend").
 echo [STEP] Post-pack verify: installer location + webui bundle freshness ...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0post_pack_verify.ps1" -ReleaseDir "%CD%\..\release" -Version "%_ver%" -SourceWebuiIndex "%CD%\dist_input\webui\index.html"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0post_pack_verify.ps1" -ReleaseDir "%CD%\..\release" -Version "%_ver%" -SourceWebuiIndex "%CD%\..\release\dist_input\webui\index.html"
 if errorlevel 1 (
   echo [ERROR] post-pack verify failed - see [ERROR] lines above
   pause

@@ -75,9 +75,8 @@ preserve_paths:
   # electron-builder buildResources 目录：nsis.include 指向的手写 NSIS 脚本源
   - "bempdiff/build/"
   - "bempdiff/build/installer.nsh"
-  # 工具链与打包输入（体积大但必需）
+  # 工具链（体积大但必需）
   - "bempdiff/toolchain/"
-  - "bempdiff/dist_input/"
   # 源码 / 配置 / 文档 / 测试夹具
   - "bempdiff/java_core/src/"
   - "bempdiff/webui/src/"
@@ -87,7 +86,8 @@ preserve_paths:
   - "docs/"
   - "tooling/scripts/"
   - "perf_bemp/"
-  - "release/"        # 交付安装包所在的产物根，整体不纳入自动清理（含 *.exe / *.blockmap）
+  - "release/"        # 交付安装包 + 全部可重建产物（dist_input/webui/java classes/jacoco）的统一出口；
+                      # 整体不纳入自动清理，一键清理走 tooling/scripts/clean-release.ps1（含 *.exe / *.blockmap）
   # 证据 / 夹具类产物（2026-09-10 逐项审查确认：均被文档或脚本具名引用，且部分不可再生）
   #   java_core_ai_replay/ : java_core/run_demo.sh 第 6 步 `ai --replay` 的离线回放夹具；
   #                          README「已验证能力」表 core.ai 行的证据。重建需真实 API 调用。

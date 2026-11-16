@@ -6,10 +6,11 @@ $ErrorActionPreference = 'Continue'
 # 兼容两种调用方式：-File（PSScriptRoot 有效）与 -Command（PSScriptRoot 为空）。
 $ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path $MyInvocation.MyCommand.Path -Parent }
 $Proto = Split-Path $ScriptDir -Parent          # bempdiff/
+$Root  = Split-Path $Proto -Parent              # 仓库根
 $JDK   = if ($env:JAVA21_HOME) { "$env:JAVA21_HOME/bin" } else { "$Proto/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64/bin" }
 $SRC   = "$Proto/java_core/src"
-$CFR   = "$Proto/dist_input/app/cfr.jar"
-$OUT   = "$ScriptDir/_testcls"
+$CFR   = "$Root/release/dist_input/app/cfr.jar"
+$OUT   = "$Root/release/cache/_testcls"
 
 # 清理旧编译产物（.NET 直删绕过 safe-delete 钩子；失败回退 Remove-Item）
 if (Test-Path $OUT) {

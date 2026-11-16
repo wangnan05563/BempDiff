@@ -88,7 +88,7 @@ BempDiff.exe ci --left <old> --right <new> [--report <md>] [--json <out.json>]
 - run: BempDiff.exe ci --left prod.war --right rc.war --json ci.json --report ci.md --fail-on-diff
 ```
 
-也可直接用 Java 运行核心：`java -cp dist_input/classes com.bempdiff.Main <子命令> ...`
+也可直接用 Java 运行核心：`java -cp ../release/dist_input/classes com.bempdiff.Main <子命令> ...`
 
 ## 配置
 
@@ -127,7 +127,7 @@ tooling/scripts/一键发布.bat
 | `java_core/` | Java 核心比对引擎（分层差异 / 解包 / 反编译 / AST / AI 管线 / HTTP 服务） |
 | `webui/` | Vue 3 + Bootstrap 前端（Vite 构建，vitest 单测） |
 | `dev-shell/` | Electron 壳（sidecar 生命周期 / 原生对话框 / 启动图 / 打包配置） |
-| `dist_input/` | 打包落地物（瘦 JRE / 编译产物 / CFR / 前端 dist） |
+| `../release/dist_input/` | 打包落地物（瘦 JRE / 编译产物 / CFR / 前端 dist）；与全部可重建产物同住仓库根 `release/` |
 | `assets/` | logo、图标、GitHub 社交预览图（`social-preview-1280x640.png`） |
 | `scripts/` | 构建/清理等开发期脚本 |
 | `../tooling/scripts/` | 启动、构建打包、一键发布、性能与质量脚本 |

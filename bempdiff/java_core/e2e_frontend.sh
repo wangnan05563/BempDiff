@@ -7,7 +7,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 JAVAC="$ROOT/bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64/bin/javac.exe"
 JAVA="$ROOT/bempdiff/toolchain/zulu21.52.15-ca-jdk21.0.12-win_x64/bin/java.exe"
 CFR="$ROOT/bempdiff/cfr.jar"
-CORE_OUT="$ROOT/bempdiff/java_core/out"
+CORE_OUT="$ROOT/release/java_core/out"
 WORK="$ROOT/bempdiff/java_core/e2e_work"
 mkdir -p "$WORK"
 

@@ -1,13 +1,14 @@
-# 编译 java_core 并跑 ModelTest + DecompileTest（短哈希相关 + BempServer 透出源）
+﻿# 编译 java_core 并跑 ModelTest + DecompileTest（短哈希相关 + BempServer 透出源）
 $ErrorActionPreference = 'Continue'
 # 路径由脚本位置推导（scripts → bempdiff），避免目录迁移后失效
 $Proto = Split-Path $PSScriptRoot -Parent
+$Root  = Split-Path $Proto -Parent          # 仓库根
 $Jdk = Join-Path $Proto 'toolchain\zulu21.52.15-ca-jdk21.0.12-win_x64\bin'
 $Src   = Join-Path $Proto 'java_core\src'
 $Test  = Join-Path $Proto 'java_core\test'
-$Lib   = Join-Path $Proto 'dist_input\app\lib'
-$Cfr   = Join-Path $Proto 'dist_input\app\cfr.jar'
-$Out   = Join-Path $Proto 'scripts\_testcls'
+$Lib   = Join-Path $Root 'release\dist_input\app\lib'
+$Cfr   = Join-Path $Root 'release\dist_input\app\cfr.jar'
+$Out   = Join-Path $Root 'release\cache\_testcls'
 $Javac = Join-Path $Jdk 'javac.exe'
 $Java  = Join-Path $Jdk 'java.exe'
 

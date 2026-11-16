@@ -9,10 +9,11 @@ import time
 import urllib.request
 
 BASE = "http://127.0.0.1:18800"
-# 脚本所在 tests_smoke → java_core → bempdiff，夹具路径据此推导
+# 脚本所在 tests_smoke → java_core → bempdiff → 项目根，夹具路径据此推导
 _PROTO = pathlib.Path(__file__).resolve().parents[2]
-OLD = str(_PROTO / "dist_input/_smoke/olddir")
-NEW = str(_PROTO / "dist_input/_smoke/newdir")
+_REPO = _PROTO.parent
+OLD = str(_REPO / "release" / "dist_input/_smoke/olddir")
+NEW = str(_REPO / "release" / "dist_input/_smoke/newdir")
 
 
 def post(path, body):

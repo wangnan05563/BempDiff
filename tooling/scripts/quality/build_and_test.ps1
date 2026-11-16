@@ -1,4 +1,4 @@
-# Build java_core (src + test) and run the full TestRunner suite.
+﻿# Build java_core (src + test) and run the full TestRunner suite.
 # PowerShell port of build_and_test.sh (bash is unavailable on this machine).
 $ErrorActionPreference = "Stop"
 # 项目根由脚本位置推导（tooling/scripts/quality → 上三级），避免目录迁移后失效
@@ -16,8 +16,8 @@ $CFR = "$ROOT\bempdiff\cfr.jar"
 $POI = "$ROOT\bempdiff\toolchain\lib\*"
 $CORE_SRC = "$ROOT\bempdiff\java_core\src"
 $TEST_SRC = "$ROOT\bempdiff\java_core\test"
-$CORE_OUT = "$ROOT\bempdiff\java_core\out"
-$TEST_OUT = "$ROOT\bempdiff\java_core\test_out"
+$CORE_OUT = "$ROOT\release\java_core\out"
+$TEST_OUT = "$ROOT\release\java_core\test_out"
 
 # clean old class files so stale artifacts cannot mask compile errors
 if (Test-Path $CORE_OUT) { Get-ChildItem $CORE_OUT -Recurse -File | Remove-Item -Force -ErrorAction SilentlyContinue }
@@ -26,13 +26,13 @@ New-Item -ItemType Directory -Force -Path $CORE_OUT, $TEST_OUT | Out-Null
 
 Write-Output "==> compile core src"
 $coreFiles = (Get-ChildItem $CORE_SRC -Recurse -Filter *.java).FullName
-& $JAVAC -cp "$CFR;$POI" -encoding UTF-8 -Xlint:-unchecked -d $CORE_OUT @coreFiles
+& $JAVAC --release 21 -cp "$CFR;$POI" -encoding UTF-8 -Xlint:-unchecked -d $CORE_OUT @coreFiles
 if ($LASTEXITCODE -ne 0) { Write-Output "core compile FAILED ($LASTEXITCODE)"; exit 1 }
 Write-Output "core compile OK"
 
 Write-Output "==> compile test"
 $testFiles = (Get-ChildItem $TEST_SRC -Recurse -Filter *.java).FullName
-& $JAVAC -cp "$CORE_OUT;$CFR;$POI" -encoding UTF-8 -Xlint:-unchecked -d $TEST_OUT @testFiles
+& $JAVAC --release 21 -cp "$CORE_OUT;$CFR;$POI" -encoding UTF-8 -Xlint:-unchecked -d $TEST_OUT @testFiles
 if ($LASTEXITCODE -ne 0) { Write-Output "test compile FAILED ($LASTEXITCODE)"; exit 1 }
 Write-Output "test compile OK"
 

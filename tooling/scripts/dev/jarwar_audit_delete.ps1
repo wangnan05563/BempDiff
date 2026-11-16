@@ -2,7 +2,7 @@
 .SYNOPSIS
   新架构（Electron 桌面壳 + jlink 瘦 JRE）构建产物审计清理脚本。
 .DESCRIPTION
-  递归清理 bempdiff\dist_input\app 与 bempdiff\dist_input\jre 两个目录
+  递归清理 release\dist_input\app 与 release\dist_input\jre 两个目录
   （对应 build_dist_input.ps1 的 $AppDir / $JreOut），删除前先记录每个文件的
   SHA-256 + 大小到 logs\ 审计清单，便于事后追溯。
 
@@ -56,8 +56,8 @@ Add-Content -Path $manifest -Value ("# mode=" + $(if($WhatIf){"WHATIF"}else{"DEL
 
 # ---- 新架构目标目录：app / jre ----
 $targets = @(
-  (Join-Path $root "bempdiff\dist_input\app"),
-  (Join-Path $root "bempdiff\dist_input\jre")
+  (Join-Path $root "release\dist_input\app"),
+  (Join-Path $root "release\dist_input\jre")
 )
 foreach ($dir in $targets) {
     if (-not (Test-Path $dir)) {
@@ -79,15 +79,15 @@ foreach ($dir in $targets) {
 # ---- 可选：旧 javafx 扁平布局清理 ----
 if ($Legacy) {
     $legacyJars = @(
-      "bempdiff\dist_input\app.jar",
-      "bempdiff\dist_input\bootstrapfx-core-0.4.0.jar",
-      "bempdiff\dist_input\ikonli-bootstrapicons-pack-12.3.1.jar",
-      "bempdiff\dist_input\ikonli-core-12.3.1.jar",
-      "bempdiff\dist_input\ikonli-javafx-12.3.1.jar",
-      "bempdiff\dist_input\javafx-base-21-win.jar",
-      "bempdiff\dist_input\javafx-controls-21-win.jar",
-      "bempdiff\dist_input\javafx-fxml-21-win.jar",
-      "bempdiff\dist_input\javafx-graphics-21-win.jar"
+      "release\dist_input\app.jar",
+      "release\dist_input\bootstrapfx-core-0.4.0.jar",
+      "release\dist_input\ikonli-bootstrapicons-pack-12.3.1.jar",
+      "release\dist_input\ikonli-core-12.3.1.jar",
+      "release\dist_input\ikonli-javafx-12.3.1.jar",
+      "release\dist_input\javafx-base-21-win.jar",
+      "release\dist_input\javafx-controls-21-win.jar",
+      "release\dist_input\javafx-fxml-21-win.jar",
+      "release\dist_input\javafx-graphics-21-win.jar"
     )
     Add-Content -Path $manifest -Value ("# legacy_flat_jars=" + $legacyJars.Count)
     foreach ($rel in $legacyJars) {

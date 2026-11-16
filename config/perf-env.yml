@@ -21,11 +21,11 @@ python_exe: "python"
 
 server:
   port: 18090
-  java_exe: "bempdiff/dist_input/jre/bin/java.exe"   # app.jar 以 JDK25(class 69) 构建，须用打包 JRE 启动
-  app_jar: "bempdiff/dist_input/app/bempdiff.jar"
-  app_lib: "bempdiff/dist_input/app/lib"
-  cfr_jar: "bempdiff/dist_input/app/cfr.jar"
-  webroot: "bempdiff/webui/dist"
+  java_exe: "release/dist_input/jre/bin/java.exe"   # app.jar 以 JDK25(class 69) 构建，须用打包 JRE 启动
+  app_jar: "release/dist_input/app/bempdiff.jar"
+  app_lib: "release/dist_input/app/lib"
+  cfr_jar: "release/dist_input/app/cfr.jar"
+  webroot: "release/webui/dist"
   user_home: "E:/qoder-perf/env/home/server"
   tmp_dir: "E:/qoder-perf/env/tmp/server"
   jvm_args: ["-Xms512m", "-Xmx3g", "-XX:+UseG1GC", "-XX:+HeapDumpOnOutOfMemoryError", "-Dfile.encoding=UTF-8"]

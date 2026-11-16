@@ -193,7 +193,8 @@ ci              --left <old> --right <new> [--report <md>] [--json <out.json>]
 也可以直接调用 Java sidecar：
 
 ```bash
-java -cp dist_input/classes com.bempdiff.Main <子命令> ...
+# 在仓库根执行
+java -cp "release/dist_input/classes" com.bempdiff.Main <子命令> ...
 ```
 
 ---
@@ -244,7 +245,7 @@ cd bempdiff/webui
 npm install
 npm run dev            # Vite 开发服务器
 npm run test:unit      # vitest run
-npm run build          # 生产构建 → dist/
+npm run build          # 生产构建 → ../release/webui/dist
 
 # 桌面壳（开发态拉起 Java sidecar + Electron 原生窗口）
 tooling/scripts/启动服务.bat      # 停止：tooling/scripts/停止服务.bat
@@ -261,12 +262,15 @@ tooling/scripts/一键发布.bat
 Java 测试走仓库内置的轻量 TestRunner，classpath 需要 `cfr.jar`：
 
 ```bash
-javac -cp "dist_input/classes;toolchain/lib/*" -d out_test test/...
-java  -cp "out_test;toolchain/lib/*;dist_input/classes;cfr.jar" \
+# 在仓库根执行（out_test 为临时目录，可随时删除）
+javac -cp "release/dist_input/classes;bempdiff/toolchain/lib/*" -d out_test bempdiff/java_core/test/...
+java  -cp "out_test;bempdiff/toolchain/lib/*;release/dist_input/classes;bempdiff/cfr.jar" \
       com.bempdiff.test.TestRunner com.bempdiff.test.XxxTest
 ```
 
-静态扫描配置见 [`sonar-project.properties`](sonar-project.properties)（project key `bempdiff`，JaCoCo 覆盖率由 `tooling/quality/jacoco/` 生成）。
+静态扫描配置见 [`sonar-project.properties`](sonar-project.properties)（project key `bempdiff`，JaCoCo 覆盖率报告落 `release/quality/jacoco/`）。
+
+> **构建产物布局**：`release/dist_input`、`release/webui/dist`、`release/java_core/out|test_out`、`release/quality/jacoco` 等全部可重复构建产物统一落在仓库根 `release/`。删该目录即完成清理（或跑 `tooling/scripts/clean-release.ps1`），重跑对应构建脚本即可重建，详见 [`docs/构建产物与清理.md`](docs/构建产物与清理.md)。
 
 ### 版本与发布约定
 

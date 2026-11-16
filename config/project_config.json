@@ -47,13 +47,13 @@
     "_description": "对应项目根目录 sonar-project.properties 文件的关键配置",
     "projectKey": "bempdiff",
     "sources": "bempdiff/java_core/src,bempdiff/webui/src",
-    "java_binaries": "bempdiff/java_core/out"
+    "java_binaries": "release/java_core/out"
   },
   "verify": {
-    "test_command": "javac -encoding UTF-8 -d nul -cp \"bempdiff/java_core/out;bempdiff/cfr.jar\" -sourcepath bempdiff/java_core/src -Xlint:all 2>&1",
+    "test_command": "javac -encoding UTF-8 -d nul -cp \"release/java_core/out;bempdiff/cfr.jar\" -sourcepath bempdiff/java_core/src -Xlint:all 2>&1",
     "test_commands": {
-      "core_compile": "javac -encoding UTF-8 -d nul -cp \"bempdiff/java_core/out;bempdiff/cfr.jar\" -sourcepath bempdiff/java_core/src -Xlint:all 2>&1",
-      "main_verify": "java -cp \"bempdiff/java_core/out;bempdiff/cfr.jar\" com.bempdiff.Main 2>&1"
+      "core_compile": "javac -encoding UTF-8 -d nul -cp \"release/java_core/out;bempdiff/cfr.jar\" -sourcepath bempdiff/java_core/src -Xlint:all 2>&1",
+      "main_verify": "java -cp \"release/java_core/out;bempdiff/cfr.jar\" com.bempdiff.Main 2>&1"
     }
   },
   "report": {

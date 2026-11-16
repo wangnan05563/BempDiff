@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * BempDiff —— 按目标架构拉取 JRE 并就位到 dist_input/jre。
+ * BempDiff —— 按目标架构拉取 JRE 并就位到 release/dist_input/jre。
  *
  * 背景（T01509 arm64 打包落地）：
  *   产物里的 JRE 必须与 Electron 壳同架构。x64 产物用 win_x64 JRE，
@@ -14,13 +14,13 @@
  *   node tooling/scripts/fetch-jre.mjs --check               # 只校验不下载
  *
  * 行为：
- *   1) 目标目录 dist_input/jre-<os>-<arch>/（不覆盖现役 dist_input/jre）
+ *   1) 目标目录 release/dist_input/jre-<os>-<arch>/（不覆盖现役 release/dist_input/jre）
  *   2) 已存在且通过 PE/ELF 架构校验 → 直接复用，秒退（幂等）
- *   3) 下载 zip 到 dist_input/.cache/，校验体积后解压
+ *   3) 下载 zip 到 release/dist_input/.cache/，校验体积后解压
  *   4) 打印校验结论：java -version + 架构判定，供人工核对
  *
  * 设计约束：
- *   - 不删除现役 dist_input/jre（承重目录，且是 x64 产线的现役载荷）
+ *   - 不删除现役 release/dist_input/jre（承重目录，且是 x64 产线的现役载荷）
  *   - 纯 Node 实现，无第三方依赖（构建链不引入新包）
  *   - 校验用 java 自身而非 file 命令（Windows 无 file）
  */
@@ -71,11 +71,11 @@ function targetKey(os, arch) {
 }
 
 function destDir(os, arch) {
-  return path.join(BEMP, 'dist_input', `jre-${os}-${arch}`)
+  return path.join(REPO, 'release', 'dist_input', `jre-${os}-${arch}`)
 }
 
 function cacheFile(file) {
-  return path.join(BEMP, 'dist_input', '.cache', file)
+  return path.join(REPO, 'release', 'dist_input', '.cache', file)
 }
 
 /**

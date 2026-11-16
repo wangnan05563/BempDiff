@@ -11,7 +11,7 @@
 
   检查与执行分离：-DryRun 只做前置评估 + 打印计划，绝不生成夹具/构建/拉服务。
 .PARAMETER Build
-  若 dist_input/app、dist_input/jre 缺失，则调用 build_dist_input.ps1 装配 Java 侧。
+  若 release/dist_input/app、release/dist_input/jre 缺失，则调用 build_dist_input.ps1 装配 Java 侧。
 .PARAMETER ForceBuild
   无论产物是否存在都重新装配（带 -Clean）。
 .PARAMETER Port
@@ -47,7 +47,7 @@ $ErrorActionPreference = 'Stop'
 $root      = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 Set-Location $root   # JMX 内夹具用相对路径，JMeter 与服务端 cwd 必须是项目根
 $proto     = Join-Path $root "bempdiff"
-$distInput = Join-Path $proto "dist_input"
+$distInput = Join-Path $root "release\dist_input"
 $appDir    = Join-Path $distInput "app"
 $jreOut    = Join-Path $distInput "jre"
 $bempJar   = Join-Path $appDir "bempdiff.jar"

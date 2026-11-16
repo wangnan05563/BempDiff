@@ -11,12 +11,12 @@
 #       （continue-on-error），避免 CI 抖动卡住主干。
 #
 # 关键设计（都是本仓库踩过的坑，见 docs/arm64平台评估.md §3）：
-#  1. **JRE 必须先换成 arm64**：`extraResources` 固定指向 dist_input/jre、
+#  1. **JRE 必须先换成 arm64**：`extraResources` 固定指向 release/dist_input/jre、
 #     主进程 main.js 硬编码 jre/bin/javaw.exe → 壳与 JRE 必须同架构。
 #     用仓内 fetch-jre.mjs + switch-jre.mjs 完成，不手写下载逻辑。
-#  2. **assemble 用 -SkipJre 而非 -SkipJava**：CI 全新检出没有 dist_input/app，
+#  2. **assemble 用 -SkipJre 而非 -SkipJava**：CI 全新检出没有 release/dist_input/app，
 #     `-SkipJava`（要求 bempdiff.jar 已存在）不成立，必须真实编译；但默认流程会
-#     jlink 重建 dist_input/jre，**覆盖**第 3 步就位的 zulu arm64 JRE。
+#     jlink 重建 release/dist_input/jre，**覆盖**第 3 步就位的 zulu arm64 JRE。
 #     -SkipJre 只跳过 jlink，编译/前端照常（构建输入 cfr.jar、toolchain/lib 已入库）。
 #  3. **产出目录用中性名 arm64-build**：与 x64 产线（release/）分离，
 #     避免取包时误取。
@@ -95,7 +95,7 @@ jobs:
           npm.cmd install --no-audit --no-fund --prefix dev-shell
           npm.cmd install --no-audit --no-fund --prefix webui
 
-      # ---- 2) 前端构建（dist_input/webui 由 assemble 镜像） ----
+      # ---- 2) 前端构建（release/dist_input/webui 由 assemble 镜像） ----
       - name: 构建 webui
         shell: pwsh
         working-directory: bempdiff/webui
@@ -109,12 +109,12 @@ jobs:
           node tooling/scripts/switch-jre.mjs --arch arm64
           node tooling/scripts/switch-jre.mjs --status
 
-      # ---- 4) 组装 dist_input（编译 jar，但不 jlink——保住就位的 arm64 JRE） ----
+      # ---- 4) 组装 release/dist_input（编译 jar，但不 jlink——保住就位的 arm64 JRE） ----
       - name: 组装 dist_input（重建 jar，跳过 jlink）
         shell: pwsh
         working-directory: bempdiff
         run: |
-          # SkipJre：真实编译 jar + 刷新 webui 镜像，绝不重新 jlink dist_input/jre
+          # SkipJre：真实编译 jar + 刷新 webui 镜像，绝不重新 jlink release/dist_input/jre
           powershell -NoProfile -ExecutionPolicy Bypass `
             -File scripts\build_dist_input.ps1 -SkipJre
           if ($LASTEXITCODE -ne 0) { throw "assemble failed（见 bempdiff\build_native.log）" }
@@ -123,13 +123,13 @@ jobs:
       - name: 校验现役 JRE 仍为 ARM64
         shell: pwsh
         run: |
-          $jre = 'bempdiff\dist_input\jre\bin\java.exe'
+          $jre = 'release\dist_input\jre\bin\java.exe'
           $bytes = [System.IO.File]::ReadAllBytes($jre)[0..1023]
           $peOff = [BitConverter]::ToInt32($bytes, 0x3C)
           $machine = [BitConverter]::ToUInt16($bytes, $peOff + 4)
-          Write-Host "dist_input/jre machine = 0x$($machine.ToString('x4'))"
+          Write-Host "release/dist_input/jre machine = 0x$($machine.ToString('x4'))"
           if ($machine -ne 0xAA64) {
-            Write-Error "dist_input/jre 不是 ARM64（0x$($machine.ToString('x4'))）——被 assemble 覆盖了？"
+            Write-Error "release/dist_input/jre 不是 ARM64（0x$($machine.ToString('x4'))）——被 assemble 覆盖了？"
             exit 1
           }
 

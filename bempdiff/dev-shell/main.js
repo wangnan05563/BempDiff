@@ -56,6 +56,13 @@ function resolveRoot() {
   return res || devRoot
 }
 
+// 构建产物统一落 <repo>/release；打包态仍为 resources/bempdiff/dist_input（extraResources 落地路径）。
+function distInputDir() {
+  const packaged = path.join(ROOT, 'bempdiff', 'dist_input')
+  if (fs.existsSync(packaged)) return packaged
+  return path.join(ROOT, 'release', 'dist_input')
+}
+
 function appendLog(file, ...args) {
   try {
     if (!fs.existsSync(LOGDIR)) fs.mkdirSync(LOGDIR, { recursive: true })
@@ -215,10 +222,10 @@ function cleanupCachesOnExit() {
 // （macOS 归档 Contents/Home/* 已由 CI 拍平到 jre/ 下，路径与 linux 同构）。
 function findJava() {
   const exe = process.platform === 'win32' ? 'javaw.exe' : 'java'
-  const base = path.join(ROOT, 'bempdiff')
-  const jre = path.join(base, 'dist_input', 'jre', 'bin', exe)
+  const base = distInputDir()
+  const jre = path.join(base, 'jre', 'bin', exe)
   if (fs.existsSync(jre)) return jre
-  const tc = path.join(base, 'toolchain')
+  const tc = path.join(ROOT, 'bempdiff', 'toolchain')
   if (fs.existsSync(tc)) {
     for (const d of fs.readdirSync(tc)) {
       if (d.startsWith('zulu21')) {
@@ -246,7 +253,7 @@ function findJavac() {
 }
 
 function findCfr() {
-  const cfr = path.join(ROOT, 'bempdiff', 'dist_input', 'app', 'cfr.jar')
+  const cfr = path.join(distInputDir(), 'app', 'cfr.jar')
   return fs.existsSync(cfr) ? cfr : null
 }
 
@@ -254,7 +261,7 @@ function findCfr() {
 // 优先 dist_input/app/lib（构建脚本分发），回退 toolchain/lib（源码/按需编译场景）。
 function findPoiLib() {
   for (const d of [
-    path.join(ROOT, 'bempdiff', 'dist_input', 'app', 'lib'),
+    path.join(distInputDir(), 'app', 'lib'),
     path.join(ROOT, 'bempdiff', 'toolchain', 'lib')
   ]) {
     if (fs.existsSync(d)) {
@@ -266,7 +273,7 @@ function findPoiLib() {
 }
 
 function findClasspath() {
-  const base = path.join(ROOT, 'bempdiff', 'dist_input')
+  const base = distInputDir()
   const classes = path.join(base, 'classes')
   const jar = path.join(base, 'app', 'bempdiff.jar')
   const dev = path.join(base, 'dev_classes')
@@ -283,7 +290,7 @@ function ensureClasspath() {
   const javac = findJavac()
   const srcDir = path.join(ROOT, 'bempdiff', 'java_core', 'src')
   if (!fs.existsSync(srcDir)) return null
-  const out = path.join(ROOT, 'bempdiff', 'dist_input', 'dev_classes')
+  const out = path.join(distInputDir(), 'dev_classes')
   fs.mkdirSync(out, { recursive: true })
   const files = []
   const walk = (d) => {
@@ -337,10 +344,10 @@ async function startBackend() {
   // webroot 统一：优先 dist_input/webui（assemble 镜像的产物），回退 webui/dist（仅前端源码直接构建）。
   // 打包态 extraResources 只包含 dist_input/webui，故这里按相对 ROOT 的多候选查找。
   const webrootCandidates = [
-    path.join('bempdiff', 'dist_input', 'webui'),
-    path.join('bempdiff', 'webui', 'dist')
+    path.join(distInputDir(), 'webui'),
+    path.join(ROOT, 'release', 'webui', 'dist')
   ]
-  const webroot = webrootCandidates.find((c) => fs.existsSync(path.join(ROOT, c)))
+  const webroot = webrootCandidates.find((c) => fs.existsSync(c))
   if (webroot) args.push('--webroot', webroot)
   const out = openLog(BACKEND_LOG)
   const child = spawn(java, args, {
@@ -427,8 +434,8 @@ let SPLASH_SIZE_H = 300
 function findSplashHtml() {
   // 优先 dist_input/webui（assemble 镜像产物，生产打包只含这里），回退 webui/dist（源码直构）
   for (const c of [
-    path.join(ROOT, 'bempdiff', 'dist_input', 'webui', 'splash.html'),
-    path.join(ROOT, 'bempdiff', 'webui', 'dist', 'splash.html')
+    path.join(distInputDir(), 'webui', 'splash.html'),
+    path.join(ROOT, 'release', 'webui', 'dist', 'splash.html')
   ]) {
     if (fs.existsSync(c)) return c
   }

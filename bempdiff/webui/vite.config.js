@@ -20,7 +20,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: 'dist',
+    outDir: '../../release/webui/dist',   // 产物统一落仓库根 release/（删 release 即清理）
     assetsDir: 'assets',
     // 本机回收站不可用 → WorkBuddy safe-delete 钩子 fail-closed：
     // vite 默认清空 dist 会调用 trash 操作并中断构建。故关闭自动清空，

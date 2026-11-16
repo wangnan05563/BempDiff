@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * BempDiff —— 打包前切换 dist_input/jre 的架构载荷。
+ * BempDiff —— 打包前切换 release/dist_input/jre 的架构载荷。
  *
  * 为什么需要（配合 T01509 arm64 落地）：
- *   electron-builder 的 extraResources 固定指向 `dist_input/jre`（产物内路径
+ *   electron-builder 的 extraResources 固定指向 `release/dist_input/jre`（产物内路径
  *   `bempdiff/dist_input/jre`）。壳与 JRE 必须同架构，而一次打包只出一个架构，
  *   所以需要在打包前把对应架构的 JRE 摆到那个固定路径。
  *
- *   直接覆盖会毁掉 x64 产线的现役载荷（dist_input/jre 是承重目录，且是
+ *   直接覆盖会毁掉 x64 产线的现役载荷（release/dist_input/jre 是承重目录，且是
  *   「不重新打包就不生效」链条的一环）。故采用「归档 + 切换」：
- *     归档：dist_input/jre-<os>-<arch>/   （fetch-jre.mjs 负责落位）
- *     现役：dist_input/jre                （本脚本原子换入/换回）
+ *     归档：release/dist_input/jre-<os>-<arch>/   （fetch-jre.mjs 负责落位）
+ *     现役：release/dist_input/jre                （本脚本原子换入/换回）
  *
  * 用法：
  *   node tooling/scripts/switch-jre.mjs --arch arm64   # 切到 win arm64
@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const REPO = path.resolve(HERE, '..', '..')
-const DIST = path.join(REPO, 'bempdiff', 'dist_input')
+const DIST = path.join(REPO, 'release', 'dist_input')
 const LIVE = path.join(DIST, 'jre')
 /** 现役 JRE 的架构标记文件（switch 时写/读） */
 const STAMP = path.join(LIVE, '.bempdiff-jre-arch')
@@ -68,7 +68,7 @@ function machineTypeOf(exe) {
   }
 }
 
-/** 解包态的 JRE 目录里没有 dist_input/.cache 等，只需 bin/java 存在即可 */
+/** 解包态的 JRE 目录里没有 release/dist_input/.cache 等，只需 bin/java 存在即可 */
 function healthy(dir) {
   return fs.existsSync(path.join(dir, 'bin', 'java.exe')) || fs.existsSync(path.join(dir, 'bin', 'java'))
 }

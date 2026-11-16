@@ -33,15 +33,15 @@
     ],
     "extraResources": [
       {
-        "from": "dist_input/app",
+        "from": "../release/dist_input/app",
         "to": "bempdiff/dist_input/app"
       },
       {
-        "from": "dist_input/jre",
+        "from": "../release/dist_input/jre",
         "to": "bempdiff/dist_input/jre"
       },
       {
-        "from": "dist_input/webui",
+        "from": "../release/dist_input/webui",
         "to": "bempdiff/dist_input/webui"
       },
       {
