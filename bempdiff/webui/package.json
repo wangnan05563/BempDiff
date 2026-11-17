@@ -13,6 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "bempdiff": "file:..",
     "vue": "^3.5.0"
   },
   "devDependencies": {

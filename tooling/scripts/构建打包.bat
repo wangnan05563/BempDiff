@@ -28,26 +28,9 @@ if errorlevel 1 (
 )
 echo [OK] Patch version bumped.
 
-REM ---------- 0. Prerequisite: Java backend artifacts ----------
-if not exist "..\release\dist_input\jre\bin\javaw.exe" (
-  echo "[ERROR] ..\release\dist_input\jre not found - build the Java backend (javac/jar/cfr/jlink) beforehand"
-  pause
-  exit /b 1
-)
-if not exist "..\release\dist_input\app\cfr.jar" (
-  echo "[ERROR] ..\release\dist_input\app\cfr.jar not found - build the Java backend beforehand"
-  pause
-  exit /b 1
-)
-set "_has_backend=0"
-if exist "..\release\dist_input\classes" set "_has_backend=1"
-if exist "..\release\dist_input\app\bempdiff.jar" set "_has_backend=1"
-if "%_has_backend%"=="0" (
-  echo "[ERROR] No backend artifact (..\release\dist_input\classes or ..\release\dist_input\app\bempdiff.jar) - build the Java backend beforehand"
-  pause
-  exit /b 1
-)
-echo [OK] Java backend artifacts present.
+REM ---------- 0. Java backend artifacts are verified AFTER the assemble step ----------
+REM   Moved here (2026-11-17): this check used to run before build_dist_input.ps1 produced
+REM   these artifacts, so a clean/fresh tree ALWAYS failed. See step 4.2 below.
 
 REM ---------- 1. Install electron-builder (here, in bempdiff/) ----------
 echo [STEP] Installing electron-builder ...
@@ -106,6 +89,42 @@ if errorlevel 1 (
   exit /b 1
 )
 echo [OK] dist_input refreshed.
+
+REM ---------- 4.2 Prerequisite check, now AFTER assemble (with one auto-retry) ----------
+REM   build_dist_input.ps1 (step 4) is the single source that produces jre/cfr.jar/jar. Verifying
+REM   here means a clean/fresh tree no longer fails before its artifacts even exist. If anything
+REM   is still missing, re-run the assembler ONCE (covers a silent partial build), then fail loud.
+echo [STEP] Verifying Java backend artifacts ...
+set "_java_retry=0"
+:verify_java_artifacts
+set "_java_ok=1"
+if not exist "..\release\dist_input\jre\bin\javaw.exe" set "_java_ok=0"
+if not exist "..\release\dist_input\app\cfr.jar" set "_java_ok=0"
+set "_has_backend=0"
+if exist "..\release\dist_input\classes" set "_has_backend=1"
+if exist "..\release\dist_input\app\bempdiff.jar" set "_has_backend=1"
+if "%_has_backend%"=="0" set "_java_ok=0"
+if "%_java_ok%"=="1" goto java_artifacts_ok
+if "%_java_retry%"=="1" goto java_artifacts_failed
+set "_java_retry=1"
+echo [WARN] Java backend artifacts incomplete after assemble - auto-invoking build_dist_input.ps1 once ...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CD%\scripts\build_dist_input.ps1"
+if errorlevel 1 (
+  echo "[ERROR] auto-retry assemble failed - check bempdiff\build_native.log"
+  pause
+  exit /b 1
+)
+goto verify_java_artifacts
+:java_artifacts_failed
+echo "[ERROR] Java backend artifacts still missing after assemble + one auto-retry:"
+echo "  ..\release\dist_input\jre\bin\javaw.exe"
+echo "  ..\release\dist_input\app\cfr.jar"
+echo "  ..\release\dist_input\classes  or  ..\release\dist_input\app\bempdiff.jar"
+echo "[ERROR] Rebuild the Java backend manually (build_dist_input.ps1) and retry."
+pause
+exit /b 1
+:java_artifacts_ok
+echo [OK] Java backend artifacts present.
 
 REM ---------- 4.5 Pre-clean win-unpacked: electron-builder's first step (emptyDir on the app
 REM   out dir) must delete release\win-unpacked\resources\app.asar; a leftover process holding the
