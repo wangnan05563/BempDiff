@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>BempDiff 0.2.0 发布五方签认表</title>
+<style>
+  @page { size: A4; margin: 14mm 13mm; }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: #1b2430; font-family: "Microsoft YaHei", "SimSun", sans-serif; font-size: 10.5pt; line-height: 1.55; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  h1 { margin: 0 0 2mm; font-size: 19pt; letter-spacing: .5pt; color: #123a6b; }
+  .sub { color: #56657a; font-size: 9pt; margin-bottom: 5mm; }
+  h2 { font-size: 12pt; margin: 6mm 0 2mm; padding-left: 2.5mm; border-left: 3.5pt solid #2f6fb3; color: #123a6b; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: .4pt solid #8a97a8; padding: 1.7mm 2mm; vertical-align: middle; }
+  th { background: #eef4fb; font-weight: 600; color: #123a6b; text-align: left; }
+  .kv th { width: 24%; }
+  .kv td { width: 26%; }
+  .pass { color: #1d6b3a; font-weight: 600; }
+  .pending { color: #a15c00; font-weight: 600; }
+  .sign td { height: 10mm; }
+  .sign th:nth-child(1), .sign td:nth-child(1) { width: 15%; }
+  .sign th:nth-child(2), .sign td:nth-child(2) { width: 14%; }
+  .sign th:nth-child(3), .sign td:nth-child(3) { width: 16%; }
+  .sign th:nth-child(4), .sign td:nth-child(4) { width: 14%; }
+  .sign th:nth-child(5), .sign td:nth-child(5) { width: 15%; }
+  .sign th:nth-child(6), .sign td:nth-child(6) { width: 20%; }
+  .note { margin-top: 3mm; padding: 3mm 4mm; background: #f7f9fc; border: .5pt solid #b7c4d6; font-size: 9.2pt; }
+  .check { margin: 2mm 0 0; font-size: 10pt; }
+  .check div { margin: 2.2mm 0; }
+  .box { display: inline-block; width: 4.2mm; height: 4.2mm; border: .6pt solid #59687c; margin-right: 2.2mm; vertical-align: -0.8mm; }
+  .footer { margin-top: 5mm; padding-top: 2mm; border-top: .5pt solid #c6d0de; color: #6b7788; font-size: 8.2pt; }
+  .mono { font-family: Consolas, "Courier New", monospace; font-size: 8.6pt; word-break: break-all; }
+  .no-break { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<h1>BempDiff 0.2.0 发布五方签认表</h1>
+<div class="sub">候选版本 0.2.0（审阅驾驶舱）· 发布日期 2026-11-24 · 归档路径 docs/signoff/0.2.0/</div>
+
+<table class="kv no-break">
+  <tr><th>安装包</th><td>release/BempDiff-0.2.0-setup.exe</td><th>文件大小</th><td>325,503,010 B（310.4 MiB）</td></tr>
+  <tr><th>SHA-256</th><td colspan="3" class="mono">1287E84E92674350B530A21B61C7623DA47F2BDF3B3F6C0E3B4423479C7A1E52</td></tr>
+  <tr><th>发布门禁</th><td colspan="3"><span class="pass">G1–G5 全部通过，无 P0/P1 缺陷</span>（技术门禁证据见下）</td></tr>
+  <tr><th>代码提交</th><td colspan="3" class="mono">a6516435a72b9b9d9445095a212c15cf0e31eec3（0.2.0 交付）<br>a319a7af146cb13c5dfd02cfa0deb188e1e4b13e（文档复核）</td></tr>
+</table>
+
+<h2>一、签认前置条件</h2>
+<table class="no-break">
+  <tr><th style="width:6%">序号</th><th style="width:24%">条件</th><th style="width:52%">证据</th><th style="width:18%">状态</th></tr>
+  <tr><td>1</td><td>G1 安全</td><td>docs/M4-安全与硬化验收-2026-11-23.md §2（XXE/YAML/CSV/脱敏/Zip Slip）</td><td class="pass">已具备</td></tr>
+  <tr><td>2</td><td>G2 主题与对比度</td><td>docs/M4-可访问性验收-2026-11-23.md（五主题 + system，最低 4.69）</td><td class="pass">已具备</td></tr>
+  <tr><td>3</td><td>G3 审阅可导出</td><td>review.json 往返 + 报告导出用例（docs/M4-安全与硬化验收 §1）</td><td class="pass">已具备</td></tr>
+  <tr><td>4</td><td>G4 性能与可访问性</td><td>docs/M4-安全与硬化验收 §4–§5（代理指标边界已登记）</td><td class="pass">已具备</td></tr>
+  <tr><td>5</td><td>G5 全量回归</td><td>docs/M5-全量回归-2026-11-24.md：Java 517/517、前端 450/450、构建 EXIT=0</td><td class="pass">已具备</td></tr>
+  <tr><td>6</td><td>RC 安装包</td><td>docs/M5-RC构建与安装验证-2026-11-24.md；含安装/启动/业务链路冒烟</td><td class="pass">已具备</td></tr>
+  <tr><td>7</td><td>无 P0/P1 缺陷</td><td>docs/M5-发布门禁报告-2026-11-24.md §4</td><td class="pass">已具备</td></tr>
+  <tr><td>8</td><td>已知问题已接受</td><td>docs/M5-发布说明-2026-11-23.md §4（6 条，含未签名与真机采样边界）</td><td class="pending">待签认</td></tr>
+</table>
+
+<h2>二、五方签认</h2>
+<table class="sign">
+  <tr><th>角色</th><th>姓名（本人填写）</th><th>结论</th><th>日期</th><th>签字/电子签</th><th>意见（有条件同意须写条件与关闭日期）</th></tr>
+  <tr><td>产品负责人</td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>研发负责人</td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>设计负责人</td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>测试负责人</td><td></td><td></td><td></td><td></td><td></td></tr>
+  <tr><td>安全负责人</td><td></td><td></td><td></td><td></td><td></td></tr>
+</table>
+<div class="note">结论填写：同意 / 有条件同意 / 不同意。有条件同意必须写明条件与关闭日期；不同意必须写明阻断项。空表不构成签认。</div>
+
+<h2>三、签认结论</h2>
+<div class="check">
+  <div><span class="box"></span>五方全部同意，AC-26 通过，允许发布 0.2.0</div>
+  <div><span class="box"></span>有条件同意，条件如下：____________________________________________________________</div>
+  <div><span class="box"></span>不同意，阻断项如下：____________________________________________________________</div>
+</div>
+
+<h2>四、发布前提示</h2>
+<div class="note">
+  1. 本安装包未做 Authenticode 签名，Windows SmartScreen 可能提示“未知发布者”；对外发布前应由发布负责人使用企业证书重签，并重新计算、公布 SHA-256。<br>
+  2. 10k 行滚动 ≥50fps、200MB 包 ≤30s 尚未做真机采样；读屏软件全流程人工走查未做。以上为已登记的非阻断遗留项。<br>
+  3. 无 0.1 安装包，跨版本覆盖安装未实测；用户数据目录 %USERPROFILE%\.bempdiff 与安装目录分离。
+</div>
+
+<div class="footer">
+  签认完成后：将本表扫描件/电子签 PDF 存入 docs/signoff/0.2.0/；在 MTask T06241 回填签认日期与结论并改为 done/verified；M5 里程碑方可置 done/100。<br>
+  本表由 AI 依据可复核证据生成，须由五位真实责任人本人签署；AI 不代签、不虚构姓名。
+</div>
+
+</body>
+</html>
