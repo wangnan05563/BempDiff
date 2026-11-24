@@ -59,14 +59,17 @@ describe('语法高亮主题包（FR-014）', () => {
     expect(loadHlTheme()).toBe('github-dark')
   })
 
-  it('cycleTheme 联动：亮界面配亮主题 → 切暗自动换 github-dark，切回亮自动换 default', () => {
-    // jsdom 无 matchMedia：system 解析为 light，cycleTheme 循环 light→dark→system(=light)
+  it('cycleTheme 联动：亮界面配亮主题 → 切暗自动换 github-dark，切到护眼（亮）自动换 default', () => {
+    // jsdom 无 matchMedia：system 解析为 light。TH-02 六态：light→dark→midnight→paper→contrast→system。
     applyTheme('light')
     setHlTheme('default') // 亮主题配亮界面：不触发联动
     cycleTheme()          // → dark 界面
     expect(state.theme).toBe('dark')
     expect(state.hlTheme).toBe('github-dark')
-    cycleTheme()          // → system（jsdom 解析为 light 界面）
+    cycleTheme()          // → midnight（仍是暗界面）：保持暗高亮，不反复切换
+    expect(state.hlTheme).toBe('github-dark')
+    cycleTheme()          // → paper（亮界面）：自动换回亮主题
+    expect(state.theme).toBe('paper')
     expect(state.hlTheme).toBe('default')
   })
 

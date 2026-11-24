@@ -1,9 +1,10 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { state, saveConfig, testConnection, fetchModels, loadContextStatus, defaultConfig, toast } from '../store'
+import { state, saveConfig, testConnection, fetchModels, loadContextStatus, defaultConfig, toast, setDiffPalette } from '../store'
 import { api } from '../api/client'
 import { pickPath, isElectron } from '../lib/desktop-bridge.js'
 import { t } from '../lib/i18n'
+import ThemeStudio from './ThemeStudio.vue'
 
 // 断点续录：未保存就关闭配置中心时，把当前表单草稿暂存本地，下次打开恢复。
 // 仅暂存"尚未落盘"的修改，保存成功即清除——避免误以为已保存、也避免重装后读到过期草稿。
@@ -288,6 +289,12 @@ async function onCloseBehaviorChange() {
   } finally {
     closeBusy.value = false
   }
+}
+
+// TH-03：差异调色板是独立本地设置（不进入后端 config），切换后立即生效并持久化。
+function onDiffPaletteChange(e) {
+  setDiffPalette(e && e.target ? e.target.value : 'default')
+  toast('success', t('cfg.diffPalette.saved'))
 }
 
 // 按当前 API Base URL + Key 拉取可用模型列表，写入 state.aiModels 供下方 datalist 补全。
@@ -697,6 +704,27 @@ function pickImportFile(ev) {
 
           <!-- 界面与高级 -->
           <div v-show="cfgTab==='ui'">
+            <!-- TH-02：六主题矩阵，点击卡片立即切换并持久化；System 跟随 OS -->
+            <div class="card card-body py-2 mb-2 theme-studio-card" style="font-size:.76rem">
+              <ThemeStudio />
+            </div>
+            <!-- TH-03 差异调色板：独立本地设置，切换立即生效；色盲模式同时启用符号与纹理线索，不单靠颜色区分 -->
+            <div class="card card-body py-2 mb-2 diff-palette-card" style="font-size:.76rem">
+              <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                <span class="fw-semibold text-nowrap"><i class="bi bi-palette"></i>{{ t('cfg.diffPalette') }}</span>
+                <span class="text-secondary">{{ t('cfg.diffPalette.desc') }}</span>
+              </div>
+              <div class="row g-2 align-items-center">
+                <label class="col-sm-3 col-form-label col-form-label-sm" for="cfgDiffPalette">{{ t('cfg.diffPalette.mode') }}</label>
+                <div class="col-sm-9">
+                  <select id="cfgDiffPalette" class="form-select form-select-sm" :value="state.diffPalette" @change="onDiffPaletteChange">
+                    <option value="default">{{ t('cfg.diffPalette.default') }}</option>
+                    <option value="colorblind">{{ t('cfg.diffPalette.colorblind') }}</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-text mt-1" style="font-size:.72rem">{{ t('cfg.diffPalette.hint') }}</div>
+            </div>
             <!-- 关闭窗口行为（仅桌面壳生效）：设置页改动立即落盘并更新主进程内存，
                  下一次点关闭即按新配置执行；未勾选「记住」时关闭仍会弹一次选择框。 -->
             <div class="card card-body py-2 mb-2 close-behavior-card" style="font-size:.76rem">
@@ -869,7 +897,7 @@ function pickImportFile(ev) {
 
 <style scoped>
 .modal-backdrop {
-  position: fixed; inset: 0; background: rgba(0,0,0,.4);
+  position: fixed; inset: 0; background: var(--bdf-overlay);
   display: flex; align-items: flex-start; justify-content: center; z-index: 1500; padding-top: 4vh; padding-bottom: 4vh;
 }
 /* 自适应高度：内容再多也不会超出视口被截断。

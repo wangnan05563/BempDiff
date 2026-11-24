@@ -204,7 +204,7 @@ onBeforeUnmount(() => {
   justify-content: center;
 }
 .guide-layer { position: fixed; inset: 0; z-index: 2000; }
-.guide-mask { position: absolute; inset: 0; background: rgba(0,0,0,.18); }
+.guide-mask { position: absolute; inset: 0; background: var(--bdf-overlay-soft); }
 /* 高亮框与气泡用 position: fixed，坐标即 getBoundingClientRect() 返回的视口坐标，
    与 guide-layer 的定位基准一致；不用 absolute（相对父容器），否则目标元素处于
    #app 内部/可滚动容器/布局变化后，父基准与 rect 视口坐标偏差导致高亮框漂移。 */
@@ -212,7 +212,7 @@ onBeforeUnmount(() => {
   position: fixed;
   border: 2px solid var(--bs-primary);
   border-radius: 6px;
-  box-shadow: 0 0 0 4px rgba(var(--bs-primary-rgb), .2);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--bdf-accent) 20%, transparent);
   box-sizing: border-box;
   pointer-events: none;
   z-index: 2001;

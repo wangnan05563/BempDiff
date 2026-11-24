@@ -32,7 +32,7 @@ import java.util.zip.ZipFile;
  * 设计要点（与详细设计 §5.1 一致）：
  *  ① 命名空间避免同名类冲突：L1 内嵌 class 的 key = "WEB-INF/lib/<jar>/<inner>"；
  *  ② 内部 lib 展开为 L1，第三方 lib 仅 jar 级记为 L2（默认折叠）；
- *  ③ 普通 jar 在 expandAll 时所有 class 视为 L1；
+ *  ③ 普通 jar 顶层 class 即该构件自身业务码，默认展开为 L1（不再依赖 expandAll）；
  *  ④ 流式：仅缓存 sha256+size+src，不缓存整条目字节（大 war 防 OOM）。
  */
 public final class PackageParser {
@@ -130,9 +130,9 @@ public final class PackageParser {
         boolean isJarClass = type == PackageType.JAR && n.endsWith(CLASS_EXT);
         boolean isPrefixed = classesPrefix != null && n.startsWith(classesPrefix);
         if (isJarClass) {
-            // 普通 jar：命中内部前缀、或 CLI --expand-all、或配置 expandAllForPlainJar 均视为 L1 展开
-            return (expandAll || cfg.isExpandAllForPlainJar() || startsWithAny(n, cfg.getInternalPrefixes()))
-                    ? Layer.L1 : Layer.L0;
+            // 普通 jar：顶层 class 属于该构件自身，默认 L1（报告/导出/AI 默认可见）。
+            // 内嵌 lib/*.jar 的 class 由 handleLibJar 单独判定，仍按内部前缀/expandAll 收敛。
+            return Layer.L1;
         } else if (isPrefixed) {
             return Layer.L1;
         }
@@ -503,6 +503,9 @@ public final class PackageParser {
         // 否则 .jspx 等 XML 语法变体会被 CONFIG 抢走）。
         if (name.endsWith(".jsp") || name.endsWith(".jspx")
                 || name.endsWith(".tag") || name.endsWith(".tagx")) return FileClass.JSP;
+        // Java 源码（目录模式常见；包内也可能带源码）：作为文本源码纳入内容级 diff 与报告。
+        // 必须先于 CONFIG/OTHER 判定，保证目录模式不把 .java 标成 OTHER。
+        if (lower.endsWith(".java")) return FileClass.JAVA;
         // 文本配置 / 描述符 / 模板：纳入内容 diff（XML/Properties/YAML/JSON/TLD/XHTML/WS
         // DL/XSL/模板语言等）；.svg 视作图片（二进制 sha 比对，见下方 STATIC）。
         // .mf（META-INF/MANIFEST.MF 等约定大写）也归 CONFIG 并走 FrontendTextDiff，

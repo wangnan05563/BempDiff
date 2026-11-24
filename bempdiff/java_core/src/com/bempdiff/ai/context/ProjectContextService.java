@@ -142,12 +142,15 @@ public final class ProjectContextService {
         if (idx == null || idx.isEmpty()) return null;
         List<String> projectPaths = new ArrayList<>();
         for (ProjectIndex.ProjectEntry e : idx.getProjects()) projectPaths.add(e.getRelPath());
+        // 简述只给“多项目仓库 + 数量”：不能把 toPromptSection() 整段塞进 summary——
+        // 那样报告「架构简述」会展开成 28 个项目清单并带出本机绝对路径，既泄露又挤占篇幅。
+        String summary = "递归扫描多项目仓库，共 " + idx.size() + " 个项目";
         return new ProjectContext(
                 idx.getRootPath(),
                 "多项目仓库（" + idx.size() + " 个项目）",
                 projectPaths,
                 List.of(), List.of(), List.of(), List.of(), List.of(),
-                idx.toPromptSection(PROMPT_MAX_CHARS));
+                summary);
     }
 
     /** 增量失效：重算指纹变化的项目；全部一致返回 null（全命中）。 */

@@ -87,6 +87,7 @@
 | 提示 `HTTP 401` | 令牌无效或权限不足 | 重新生成 token（私有仓库需 `repo` 权限），核对「关于」页或环境变量中的令牌是否正确 |
 | 提示 `HTTP 404` | 仓库不存在 / 私有且未提供有效令牌 | 检查 `BEMPDIFF_GITHUB_REPO` 是否写错；私有仓库配 token |
 | 网络报错（超时/DNS） | 本机到 `api.github.com` 不通 | 检查网络/代理是否可达；通报推送设定的超时后自动降级、不影响其他功能 |
+| `PKIX path building failed` / `SSLHandshakeException` | 运行环境 JRE 信任库缺少根证书（常见于企业代理、内网 HTTPS 拦截） | 用 `keytool -importcert -alias corp-root -cacerts -file root.cer` 把根证书导入实际运行 JRE 的 `cacerts`；或在代理侧放行 `api.github.com`。离线场景可直接在 Releases 页手动下载安装包覆盖安装。页面「检查更新」失败时点「查看技术详情」可展开并复制完整异常，便于贴给运维定位 |
 | 发了新版本但仍提示“已最新” | tag 版本号没有大于当前版本 | 核对 tag 语义化递增；检查是否误用“草稿/预发布”的 tag |
 | 版本显示为 `当前版本未知` | 壳层未注入 `appVersion` 且内置版本缺失 | 检查桌面壳 `preload` 是否暴露 `appVersion` |
 | 点击后无反应（一直转圈） | 每 5s/8s 请求超时 | 网络慢会最终超时降级并给出提示，不要反复狂点 |

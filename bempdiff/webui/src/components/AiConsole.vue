@@ -40,6 +40,9 @@ function phaseLabel(p) {
 }
 // 分析类别显示名：labelKey 渲染期求值（切语言即时刷新）
 const catLabel = (c) => (c && c.labelKey ? t(c.labelKey) : (c ? c.label : ''))
+// P2-8：历史 AI 任务标题按 titleKey+titleParams 渲染期求值；切语言时旧任务不再停留在创建时语言。
+// 兼容早期无 titleKey 的任务对象，回退其快照 title。
+const taskTitle = (task) => (task && task.titleKey ? t(task.titleKey, task.titleParams || {}) : (task ? task.title : ''))
 // tab 关闭按钮 title：tab 的 v-for 以 t 命名任务变量，覆蔽 i18n 的 t，故用 computed 预求
 const closeTabTitle = computed(() => t('ac.closeTab'))
 function statusMeta(t) {
@@ -195,10 +198,10 @@ function copyDisabled(t) { return !(t && t.answer && t.answer.length) }
         <button v-for="t in state.aiTasks" :key="t.id"
                 class="console-tab btn btn-sm"
                 :class="{ active: t.id === state.aiActiveTaskId }"
-                :aria-label="t.title" :title="t.title"
+                :aria-label="taskTitle(t)" :title="taskTitle(t)"
                 @click="selectAiTask(t.id)">
           <i class="bi" :class="tabCls(t)"></i>
-          <span class="tab-title">{{ t.title }}</span>
+          <span class="tab-title">{{ taskTitle(t) }}</span>
           <i class="bi bi-x tab-close" @click.stop="closeAiTask(t.id)" :title="closeTabTitle"></i>
         </button>
       </div>
@@ -280,7 +283,9 @@ function copyDisabled(t) { return !(t && t.answer && t.answer.length) }
 
 <style scoped>
 .ai-console { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden;
-  padding: .75rem .75rem .5rem; }
+  padding: .75rem .75rem .5rem;
+  /* P2-6：控制台自身也铺主题底色，避免主题切换瞬间透出下层未重绘的白色区域。 */
+  background: var(--bs-body-bg); }
 .console-head { font-size: .8rem; font-weight: 600; color: var(--bs-secondary-color); display: flex; align-items: center; }
 .console-new { margin: .4rem 0; }
 .console-empty { font-size: .8rem; padding: .5rem 0; }
@@ -309,8 +314,8 @@ function copyDisabled(t) { return !(t && t.answer && t.answer.length) }
 .console-foot .icon-only { --bs-btn-padding-x: .45rem; }
 
 /* 思考块：浅灰 + 微弱紫色左边框（呼应 AiAnalysisDialog 视觉），默认折叠 */
-.thinking-block { margin: 4px 0 10px; padding: 6px 10px; background: rgba(178,38,255,0.05);
-  border-left: 2px solid rgba(178,38,255,0.35); border-radius: 0 6px 6px 0; }
+.thinking-block { margin: 4px 0 10px; padding: 6px 10px; background: var(--bdf-ai-thinking-soft);
+  border-left: 2px solid var(--bdf-ai-thinking-line); border-radius: 0 6px 6px 0; }
 .thinking-header { cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--bs-secondary-color); }
 .thinking-icon { font-size: 12px; color: var(--bs-secondary-color); }
 .thinking-summary { color: var(--bs-secondary-color); font-size: 11.5px; }
@@ -318,8 +323,8 @@ function copyDisabled(t) { return !(t && t.answer && t.answer.length) }
 .thinking-body { margin-top: 6px; max-height: 200px; overflow-y: auto; }
 .thinking-block.collapsed .thinking-body { display: none; }
 .thinking-step { display: flex; gap: 6px; padding: 3px 0; font-size: 11px; color: var(--bs-secondary-color);
-  border-bottom: 1px dashed rgba(128,128,128,0.12); align-items: flex-start; }
-.step-phase { padding: 1px 5px; border-radius: 3px; font-size: 10px; white-space: nowrap; color: var(--bs-secondary-color); background: rgba(178,38,255,0.1); }
+  border-bottom: 1px dashed var(--bdf-ai-thinking-dash); align-items: flex-start; }
+.step-phase { padding: 1px 5px; border-radius: 3px; font-size: 10px; white-space: nowrap; color: var(--bs-secondary-color); background: var(--bdf-ai-thinking-chip); }
 .step-message { flex: 1; color: var(--bs-secondary-color); font-size: 11px; line-height: 1.5; }
 
 .ai-answer { margin-top: 6px; padding: 10px 12px; border: 1px solid var(--bs-border-color); border-radius: 8px; background: var(--bs-body-bg); min-height: 80px; }

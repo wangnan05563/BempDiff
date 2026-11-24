@@ -1,0 +1,59 @@
+﻿编号,类别,模块,需求,现状/缺口,竞品依据,优先级,工作量,验收口径,建议主责,阶段,依赖
+CX-01,客户体验,CX,Launchpad：新建、最近、收藏、模板、示例包,历史/命名会话藏在工具栏下拉，无独立首页,BC Home、GitHub Desktop 最近仓库、Meld 会话,P0,M,3 次点击内恢复最近一次对比；可 pin；空态有示例包入口,产品/前端,Wave 0-1,
+CX-02,客户体验,CX,审阅闭环：文件级汇总、未审筛选、进度,仅逐 hunk 标记；无文件级 roll-up；无“只看未审”,GitHub PR viewed、sem certify、jar-analyzer 书签,P0,M,树/状态栏显示 `已审/总数`；可一键只看未审；切换文件不丢进度,产品/前端,Wave 0-1,CX-04
+CX-03,客户体验,CX,书签、备注、证据摘录,无书签/备注；无法把关键行+说明带入报告,sem certify、jar-analyzer 备忘录、BC 会话,P0,M,可对 hunk/文件加备注；报告含“审阅记录/证据”章节；可导出,产品/前端,Wave 0-1,CX-02
+CX-04,客户体验,CX,总览先行：KPI + Top 风险 + 类型分布 + 建议回归,状态栏/报告有统计，无总览页,Diffuse 先总览、BC Home、KDiff3 目录摘要,P0,M,打开任务先看到 4 个 KPI、Top5 风险文件、类型分布；点击可下钻,产品/前端,Wave 0-1,
+CX-05,客户体验,CX,命令面板 + 快捷键自定义,有固定快捷键与 `?` 速查，无命令面板/自定义,VS Code 命令面板、GitHub Desktop 快捷键,P1,M,`Ctrl+Shift+P` 可搜索全部动作；保留 `Ctrl+K` 给树过滤，不冲突,产品/前端,Wave 2-4,
+CX-06,客户体验,CX,报告模板 / 角色视图,单一 MD/HTML 报告，无开发/测试/审计/管理视图,BC 会话、japicmp 多格式、sem Markdown,P1,M,4 套模板；审计视图含审阅记录/证据/结论；测试视图含建议回归,产品/前端,Wave 2-4,CX-07
+CX-07,客户体验,CX,分享包：PDF、JSON、长图、自包含 HTML,MD/HTML 已有；JSON 仅 CI；无 PDF/长图,diffoscope HTML、japicmp HTML/XML、BC 报告,P1,M,一键导出 4 种格式；HTML 离线可开；PDF 分页/页脚正确,产品/前端,Wave 2-4,CX-06
+CX-08,客户体验,CX,批量对比队列 + 预演,无批量队列；无“先列出将执行动作”,KDiff3 目录合并预演、BC 批量脚本,P2,L,可编排多组基线/目标；执行前预览；总报告汇总,产品/前端,Backlog,
+CX-09,客户体验,CX,对比前检查（Preflight）,无统一检查：同输入、包有效性、大小预估、忽略规则,BC 会话设置、KDiff3 目录摘要,P1,S,比对前给出 3 类提示：同文件、超大包、无效归档；可一键继续,产品/前端,Wave 2-4,
+CX-10,客户体验,CX,任务中心：后台任务/取消/重试,状态栏有进度与取消导出；无统一任务中心,GitHub Desktop 后台任务、WinMerge 进度,P1,M,比对/导出/AI/解包统一列表；可取消/重试/查看日志,产品/前端,Wave 2-4,
+CX-11,客户体验,CX,空态/错误态/崩溃恢复,有部分空态/toast；无统一错误插画与恢复入口,GitHub Desktop 错误对话框、BC 错误提示,P1,S/M,每类错误有“原因/下一步/重试/诊断包”四要素；崩溃后可恢复上次任务,产品/前端,Wave 2-4,
+CX-12,客户体验,CX,首启 2.0：示例包 + 3 步产出报告,有 GuideOverlay 首次引导；无示例包/目标导向路径,BC Home、GitHub Desktop 引导,P2,S/M,新用户 3 分钟内完成一次示例比对并导出报告,产品/前端,Backlog,
+FN-01,功能扩展,FN,API 兼容性 2.0：二进制/源码、语义版本、注解、序列化,`ApiCompat` 仅源码级 public/protected 三级；无 binary 细节/语义版本,japicmp binary/source + semantic version + 注解/序列化,P1,L,夹具覆盖移除/签名/泛型/桥接/注解/序列化 6 类；给出语义版本建议,Java/产品,Wave 2-4,FN-03
+FN-02,功能扩展,FN,影响面 2.0：方法级调用图、入口、测试映射,`ImpactAnalyzer` 类级引用（import/同包/名称匹配）,sem impact/tests、jar-analyzer 调用链,P1,L,变更方法能列出调用方/被调用方；Spring/Servlet 入口；建议测试清单,Java/产品,Wave 2-4,FN-03
+FN-03,功能扩展,FN,兼容性/影响面结构化 API,目前只进 Markdown 报告/AI 上下文，前端无结构化数据,japicmp JSON/XML、sem JSON、jar-analyzer MCP,P0,M,`/api/job` 返回 `apiCompat`/`impact` 结构化字段；报告/UI/CI 同源,Java/产品,Wave 0-1,BempServer 结构化 API
+FN-04,功能扩展,FN,配置语义 diff：properties/YAML/XML/JSON,目前行级文本 diff；键路径/类型/环境覆盖不可见,Graphtage、WinMerge 表格、BC 表格,P0,M,按键路径对齐；类型变化/删除/新增/覆盖高亮；密钥脱敏,Java/产品,Wave 0-1,
+FN-05,功能扩展,FN,Office 结构化 diff：xlsx 单元格/公式、docx 段落/样式、pptx 幻灯片,`OfficeTextDiff` 仅抽取文本,BC 多 sheet 表格、WinMerge CSV/TSV、Excel 原生,P1,M/L,xlsx 可按 sheet/单元格/公式对齐；docx 段落级；pptx 幻灯片级,Java/产品,Wave 2-4,
+FN-06,功能扩展,FN,依赖/POM/SBOM diff：嵌套 jar、版本、许可证,能解析嵌套 jar；无 SBOM/依赖图,jar-analyzer SCA、Syft/Grype、diffoscope,P1,M,输出依赖树/版本变化/许可证；嵌套 jar 覆盖率 ≥95%,Java/产品,Wave 2-4,FN-05
+FN-07,功能扩展,FN,CVE/许可证/禁用依赖策略,无 CVE/许可证策略,jar-analyzer SCA、Trivy/Grype,P1,L,离线库可更新；CVSS/修复版本；按可达性排序；可配置禁用清单,Java/产品,Wave 2-4,FN-06
+FN-08,功能扩展,FN,JAR 签名/证书/时间戳/Manifest 校验,无签名/证书校验,jarsigner、diffoscope、银行合规,P1,M,显示签名者/证书有效期/时间戳/Manifest 摘要；篡改可定位,Java/产品,Wave 2-4,
+FN-09,功能扩展,FN,多反编译器 fallback + 质量评分,目前单 CFR 链路,jar-analyzer Fernflower 改进版、Recaf,P2,M,CFR 失败自动切换备选；每类显示反编译质量/失败原因,Java/产品,Backlog,
+FN-10,功能扩展,FN,字节码/常量池/注解视图,无字节码视图,javap、Recaf、jar-analyzer,P2,M,可切换源码/字节码；显示方法描述符/常量池/注解,Java/产品,Backlog,
+FN-11,功能扩展,FN,归档格式扩展：ear/tar/7z/rar/递归,目前 jar/war/fat jar + 嵌套 jar,diffoscope、WinMerge 7-Zip、BC 归档,P2,M/L,至少支持 ear/tar/7z；递归深度可配置；超限熔断,Java/产品,Backlog,
+FN-12,功能扩展,FN,全局结构化搜索/索引,只有树内过滤；无全局类/方法/字符串搜索,jar-analyzer 字符串/方法搜索、sem grep,P2,M/L,可搜类/方法/字段/字符串/注解；结果可跳到 diff,Java/产品,Backlog,
+FN-13,功能扩展,FN,实体级语义 diff：方法/字段 rename/move/cosmetic,AST 归一化只做“等价跳过”，不输出实体变更,sem、difftastic、diffsitter,P1,L,输出实体级 added/modified/deleted/renamed/moved；格式变化标 cosmetic,Java/产品,Wave 2-4,FN-01
+FN-14,功能扩展,FN,基线与趋势：多版本纵向对比,无多版本趋势,BC 会话、jar-analyzer 历史、sem history,P2,L,同一应用 N 个版本时间线；持续变更模块排行,Java/产品,Backlog,
+FN-15,功能扩展,FN,规则包/插件：自定义解析器/策略,只有 ignore rules,KDiff3 插件、WinMerge 插件,P2,L,规则包可导入导出；不执行任意代码；版本化,Java/产品,Backlog,
+FN-16,功能扩展,FN,构建噪声诊断与忽略规则推荐,忽略规则手动配置,WinMerge 过滤、GitHub Desktop 变更过滤,P1,S/M,自动识别时间戳/版本号/路径等噪声；给出可一键应用的规则,Java/产品,Wave 2-4,
+UI-01,UI 升级,UI,Design Tokens + 组件清单,直接依赖 Bootstrap 变量 + 各组件 scoped CSS；无统一语义 token,GitHub Desktop 组件系统、BC 统一外观,P0,M,颜色/间距/字号/圆角/阴影/状态 token 化；组件不再硬编码色值,前端/设计,Wave 0-1,
+UI-02,UI 升级,UI,工作区 IA 重组：Compare Bar + Review Tree + Diff + Insight + Status,当前三栏可用，但入口/操作/信息层级混杂,GitHub Desktop 仓库→变更→diff、BC Home/会话,P0,M,顶部只留全局比对与命令入口；左树有审阅头；右栏五页签；底部状态完整,前端/设计,Wave 0-1,
+UI-03,UI 升级,UI,命令栏 + 渐进披露,单行 14+ 控件、两个 320–420px 路径输入；窄屏换行,GitHub Desktop 3.5.13 工具栏空间计算,P0,M,1280px 下不换行、不遮挡；低频动作进“更多/命令面板”,前端/设计,Wave 0-1,
+UI-04,UI 升级,UI,树审阅头：进度、状态计数、筛选 chips,有状态/风险/搜索过滤，无审阅进度/未审 chip,GitHub PR files、WinMerge 过滤,P1,S/M,顶部显示 `已审 12/48`；chips 可组合；清除全部过滤一键,前端/设计,Wave 2-4,CX-02
+UI-05,UI 升级,UI,Diff Map / minimap + hunk header + sticky context,有虚拟滚动/上下一处，无 minimap；长文件定位靠滚动,BC Location Pane、WinMerge Location View、Meld diff map,P1,M,右侧 8px minimap；点击跳转；当前 hunk 高亮；hunk header 固定,前端/设计,Wave 2-4,NF-01
+UI-06,UI 升级,UI,Tab 溢出管理 + 会话布局恢复,有 tab/pin/关闭其他；无溢出菜单/布局恢复,GitHub Desktop 工具栏、BC 会话,P1,S/M,>8 tab 出现溢出菜单；重启恢复 tab/栏宽/滚动位置,前端/设计,Wave 2-4,
+UI-07,UI 升级,UI,Insight 五页签：总览/兼容/影响/证据/AI,现有 file/global/break/audit/console，缺总览/兼容/影响独立页,sem certify、japicmp 报告、jar-analyzer 面板,P0,M,五页签可切换；空态有解释；点击条目跳到对应 diff,前端/设计,Wave 0-1,FN-03
+UI-08,UI 升级,UI,响应式 + 高 DPI（125%–200%）,有 media query 收窄；高 DPI 未专项验收,BC 高 DPI 修复、WinMerge 2.16.60 工具栏间距,P1,M,1280/1440/4K + 125/150/200% 无裁切/错位/字体跳变,前端/设计,Wave 2-4,
+UI-09,UI 升级,UI,可访问性：键盘、焦点、ARIA、读屏、减少动效,有 aria-label/快捷键；无系统化验收,GitHub Desktop 3.5.3 对比度/焦点/读屏,P1,M,核心流程键盘可达；焦点顺序合理；对比度 ≥4.5:1；`prefers-reduced-motion` 生效,前端/设计,Wave 2-4,
+UI-10,UI 升级,UI,动效与反馈：骨架屏、进度、toast、乐观更新,有 spinner/toast/进度；缺统一骨架/阶段反馈,GitHub Desktop 进度、BC 状态栏,P1,S/M,长任务分阶段（解析→反编译→diff→AI）；无空白等待,前端/设计,Wave 2-4,
+UI-11,UI 升级,UI,空态/错误态插画与引导,有部分空态；风格不统一,BC/GitHub Desktop 空态,P2,S,空态有原因/下一步/示例；错误态可复制诊断信息,前端/设计,Backlog,
+TH-01,主题升级,TH,主题 Token 架构 + Registry,目前 `data-bs-theme` + `--bs-*` + 零散 scoped CSS,WinMerge Color Schemes、BC 统一外观,P0,M,语义 token 覆盖 surface/text/border/accent/diff/syntax；主题注册表 JSON 化,前端/设计,Wave 0-1,
+TH-02,主题升级,TH,6 主题矩阵：亮/暗/跟随系统/午夜/护眼/高对比,只有亮/暗/跟随系统,WinMerge 亮暗方案、BC 暗色、jar-analyzer 3 主题,P0,M,6 主题全部面板可读；切换 <200ms；持久化；跟随系统实时,前端/设计,Wave 0-1,
+TH-03,主题升级,TH,色盲安全 diff 调色 + 非颜色线索,红绿语义；无蓝橙/纹理/符号兜底,delta 可样式化、GitHub 对比度,P0,S/M,新增蓝/橙方案；+/−/~/→ 符号；色盲模拟下可区分,前端/设计,Wave 0-1,
+TH-04,主题升级,TH,主题工作室：预览/导入/导出/恢复默认,无预览/导入导出；切主题靠循环按钮,WinMerge 保存 scheme、BC 主题预览,P1,M,缩略预览；JSON 导入导出；取消预览还原；恢复默认,前端/设计,Wave 2-4,TH-01
+TH-05,主题升级,TH,密度/字号/行高/缩放,固定 13px UI、代码行高固定,GitHub Desktop 外观格式、BC 字体缩放,P1,M,紧凑/舒适/演示三档；UI 12–15px；代码 12–16px；80–150%,前端/设计,Wave 2-4,TH-01
+TH-06,主题升级,TH,语法主题扩展：Solarized/VS 等 6 套,已有 4 套：default/GitHub Light/GitHub Dark/One Dark,WinMerge VS Dark/Solarized、delta bat 主题,P1,S/M,新增 Solarized Light/Dark、VS Dark+；每套校验 13 token,前端/设计,Wave 2-4,TH-01
+TH-07,主题升级,TH,报告/打印主题独立,报告 HTML 主题与 App 未统一；无打印样式,diffoscope HTML、japicmp HTML,P1,S/M,正式/屏幕两套；打印分页/页脚/黑白可读,前端/设计,Wave 2-4,TH-01
+TH-08,主题升级,TH,安装器/更新器暗色 + 高 DPI,未统一,BC 5 安装器暗色、WinMerge 高 DPI,P2,S,安装/更新向导支持亮暗与 125–200%,前端/设计,Backlog,
+TH-09,主题升级,TH,首屏无闪白 + 自动 OS 主题,暗色切换白底已修；首屏预加载未系统化,WinMerge 2.16.54.2 修 dark mode 白闪,P1,S,冷启动首帧即目标主题；无白色 flash；系统切换无闪烁,前端/设计,Wave 2-4,
+AU-01,自动化/AI,AU,CI 契约 2.0：JSON Schema、SARIF、Action 模板,已有 `ci --json --fail-on-diff`；无 Schema/SARIF/模板,japicmp MCP/XML、sem JSON、diffoscope,P1,M,Schema 版本化；GitHub Action 一行接入；SARIF 可上传,Java/前端,Wave 2-4,FN-03
+AU-02,自动化/AI,AU,策略门禁：fail-on-breaking/API/CVE、baseline 白名单,只有 fail-on-diff,japicmp semantic version、银行合规,P1,M,`--fail-on-breaking`/`--fail-on-cve`；baseline 可豁免；退出码稳定,Java/前端,Wave 2-4,AU-01
+AU-03,自动化/AI,AU,MCP / Agent API,无 MCP；只有 CLI/HTTP,japicmp MCP、jar-analyzer MCP、sem MCP,P1,M,暴露 compare/query/report 三类工具；本地只读；权限可控,Java/前端,Wave 2-4,FN-03
+AU-04,自动化/AI,AU,Inline AI：hunk 解释 + 追问,AI 控制台是任务级，非行级,GitHub Copilot、sem/agent,P1,M,选中 hunk 可“解释/风险/回滚建议”；回答引用类/方法/行号,Java/前端,Wave 2-4,FN-02
+AU-05,自动化/AI,AU,AI 测试点/发布说明/回归范围,已有 testpoints/risk 类别；无结构化导出,sem impact/tests、GitHub Copilot,P2,M,测试点导出 JUnit/Postman 骨架；发布说明按模板,Java/前端,Backlog,
+AU-06,自动化/AI,AU,模型路由、成本看板、评测集,有成本闸门/usage；无模型选择/评测,GitHub Desktop 3.5.12 模型选择,P1,M,可按任务选模型；成本/延迟看板；固定评测集防回归,Java/前端,Wave 2-4,
+NF-01,非功能,NF,性能预算与基准：50k 树、10k diff、200MB 包、内存,已有虚拟滚动/窗口化/60k 降级；无预算/基准门禁,GitHub Desktop 3.5.9 长列表、WinMerge 大文件,P1,M,50k 树首屏 ≤2s；10k diff 滚动 ≥50fps；200MB 包 ≤30s；内存上限,Java/架构,Wave 2-4,NF-02
+NF-02,非功能,NF,安全加固：zip slip、解压炸弹、反编译沙箱、公式注入,已有 zip bomb 大小上限；仍需专项审计,jar-analyzer 安全公告、diffoscope,P0,M,恶意归档路径不越界；解压深度/条目/CPU 有上限；异常不崩,Java/架构,Wave 0-1,
+NF-03,非功能,NF,崩溃恢复/自动保存,无任务级 autosave,BC 会话、GitHub Desktop,P1,M,崩溃后恢复最近任务/审阅标记/窗口布局,Java/架构,Wave 2-4,
+NF-04,非功能,NF,i18n/时区/数字格式,有中英 i18n；日期/数字格式未统一,GitHub Desktop 3.5.10 外观格式,P2,S,日期/时间/数字按 Locale；报告时区一致,Java/架构,Backlog,

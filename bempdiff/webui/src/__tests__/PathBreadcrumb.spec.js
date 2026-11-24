@@ -108,6 +108,21 @@ describe('编辑模式（查看/编辑完整路径）', () => {
     expect(w.find('input.pb-input').element.value).toBe('D:/a/b.war')
   })
 
+  it('短路径面包屑铺满时，点编辑图标也能进入完整路径编辑', async () => {
+    const w = mountCrumb({ modelValue: 'D:/a/b.war' })
+    expect(w.find('.pb-edit').exists()).toBe(true)
+    await w.find('.pb-edit').trigger('click')
+    await flush()
+    expect(w.find('input.pb-input').exists()).toBe(true)
+    expect(w.find('input.pb-input').element.value).toBe('D:/a/b.war')
+  })
+
+  it('disabled 时编辑图标不进入编辑', async () => {
+    const w = mountCrumb({ modelValue: 'D:/a/b.war', disabled: true })
+    await w.find('.pb-edit').trigger('click')
+    expect(w.find('input.pb-input').exists()).toBe(false)
+  })
+
   it('点击层级节点不进入编辑', async () => {
     const w = mountCrumb({ modelValue: 'D:/a/b.war' })
     await w.findAll('.pb-seg')[0].trigger('click')
@@ -132,6 +147,30 @@ describe('编辑模式（查看/编辑完整路径）', () => {
     const input = w.find('input.pb-input')
     await input.setValue('D:/x/y.war')
     await input.trigger('keydown', { key: 'Escape' })
+    expect(w.emitted('update:modelValue')).toBeFalsy()
+  })
+
+  it('失焦（点击页面其他区域）确认新路径，避免手填内容丢失', async () => {
+    const w = mountCrumb({ modelValue: 'D:/a/b.war' })
+    clickBlank(w)
+    await flush()
+    const input = w.find('input.pb-input')
+    await input.setValue('D:/x/y.war')
+    await input.trigger('blur')
+    await flush()
+    expect(w.emitted('update:modelValue')[0][0]).toBe('D:/x/y.war')
+    expect(w.find('input.pb-input').exists()).toBe(false)
+  })
+
+  it('Esc 取消后紧接的失焦不提交', async () => {
+    const w = mountCrumb({ modelValue: 'D:/a/b.war' })
+    clickBlank(w)
+    await flush()
+    const input = w.find('input.pb-input')
+    await input.setValue('D:/x/y.war')
+    await input.trigger('keydown', { key: 'Escape' })
+    await input.trigger('blur')
+    await flush()
     expect(w.emitted('update:modelValue')).toBeFalsy()
   })
 })

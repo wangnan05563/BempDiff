@@ -28,10 +28,13 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -58,8 +61,20 @@ public final class Decompiler {
     private final boolean inProcessCfrAvailable;
 
     private static final String JAVAP = "javap";
+    /** NF-02 安全 V1：反编译子进程硬超时。旧实现 p.waitFor() 无上限，畸形 class/CFR 死循环会永久挂住请求线程。
+     *  默认 20s，可用 -Dbempdiff.decompileTimeoutSeconds=5..120 调整。 */
+    private static final int DECOMPILE_TIMEOUT_SECONDS = resolveTimeoutSeconds();
     /** 缺失侧哈希占位串（7 个零），与 DecompiledUnit 的占位语义一致。 */
     private static final String MISSING_HASH = "0000000";
+
+    private static int resolveTimeoutSeconds() {
+        try {
+            int v = Integer.parseInt(System.getProperty("bempdiff.decompileTimeoutSeconds", "20"));
+            return Math.max(5, Math.min(120, v));
+        } catch (NumberFormatException e) {
+            return 20;
+        }
+    }
 
     /** P1-1 反编译缓存：sha256(class bytes) → 源码，access-order LRU max 256，避免重复 CFR。
      *  P0-A（性能测试报告 §8#1/§9-A）升级为 static「进程级 LRU」：
@@ -81,6 +96,15 @@ public final class Decompiler {
      *  但降级子进程仍可能随请求膨胀）。缓存命中的短路径不消耗许可，故绝大多数读多场景不受影响。 */
     private static final Semaphore DECOMPILE_GATE =
             new Semaphore(Math.max(1, Runtime.getRuntime().availableProcessors()));
+
+    /** NF-02：进程内 CFR 无法从外部强杀，放到守护线程里执行并由 Future 限时等待；
+     *  超时后请求线程立即返回（外层降级 javap），遗留线程由 daemon 属性保证不阻塞进程退出。 */
+    private static final ExecutorService INPROC_CFR_POOL =
+            Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r, "bempdiff-cfr-inproc");
+                t.setDaemon(true);
+                return t;
+            });
 
     /**
      * D5 跨会话持久化反编译缓存（2026-08-17，来源 docs/BempDiff_AI优化与竞品分析报告.md P0）。
@@ -264,6 +288,24 @@ public final class Decompiler {
      * 每次调用自建一个 driver 实例（CFR 非线程安全共享实例），由调用方线程池并行驱动以线性扩展。
      */
     private String cfrInProcess(File classFile) throws IOException {
+        Future<String> future = INPROC_CFR_POOL.submit(() -> cfrInProcessUnbounded(classFile));
+        try {
+            return future.get(DECOMPILE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (TimeoutException te) {
+            future.cancel(true);
+            throw new IOException("CFR 进程内反编译超时（>" + DECOMPILE_TIMEOUT_SECONDS + "s），已中断请求线程");
+        } catch (ExecutionException ee) {
+            Throwable cause = ee.getCause();
+            if (cause instanceof IOException) throw (IOException) cause;
+            throw new IOException("CFR 进程内反编译失败：" + (cause == null ? ee.getMessage() : cause.getMessage()), cause);
+        } catch (InterruptedException ie) {
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            throw new IOException("CFR 进程内反编译被中断", ie);
+        }
+    }
+
+    private String cfrInProcessUnbounded(File classFile) throws IOException {
         StringBuilder sb = new StringBuilder();
         OutputSinkFactory sinkFactory = new OutputSinkFactory() {
             @Override
@@ -293,27 +335,64 @@ public final class Decompiler {
         return out;
     }
 
+    /**
+     * NF-02：启动子进程并带硬超时读取合并后的 stdout/stderr。
+     * 读取必须放在独立线程——若在主线程先 readAll 再 waitFor，进程挂住时 readAll 先永久阻塞，超时永远轮不到。
+     * 超时后 destroyForcibly + 中断读线程，保证请求线程和子进程都能退出。
+     */
+    private static String runProcessWithTimeout(ProcessBuilder pb, String label) throws IOException {
+        Process p = pb.start();
+        final StringBuilder out = new StringBuilder();
+        final IOException[] readErr = new IOException[1];
+        Thread reader = new Thread(() -> {
+            try {
+                out.append(decode(readAll(p.getInputStream())));
+            } catch (IOException e) {
+                readErr[0] = e;
+            }
+        }, "bempdiff-decompile-reader");
+        reader.setDaemon(true);
+        reader.start();
+        boolean finished;
+        try {
+            finished = p.waitFor(DECOMPILE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException ie) {
+            p.destroyForcibly();
+            reader.interrupt();
+            Thread.currentThread().interrupt();
+            throw new IOException(label + "被中断", ie);
+        }
+        if (!finished) {
+            p.destroyForcibly();
+            reader.interrupt();
+            throw new IOException(label + "超时（>" + DECOMPILE_TIMEOUT_SECONDS + "s），已强制终止子进程");
+        }
+        try {
+            reader.join(1000);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+        if (reader.isAlive()) {
+            p.getInputStream().close();
+            reader.interrupt();
+        }
+        if (readErr[0] != null) throw readErr[0];
+        if (p.exitValue() != 0) {
+            String text = out.toString().trim();
+            throw new IOException(label + "退出码 " + p.exitValue() + (text.isEmpty() ? "" : "：" + text));
+        }
+        return out.toString();
+    }
+
     private String cfr(File classFile, Path cfrJar) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(
                 javaBin, "-jar", cfrJar.toString(), classFile.getAbsolutePath(),
                 "--sugarenums", "false", "--hideutf", "false", "--silent", "true");
         // P1-3：stderr 并入 stdout 单流读取，消除双管道缓冲满导致的进程死锁（CFR 子进程）。
         pb.redirectErrorStream(true);
-        Process p = pb.start();
-        try {
-            String out = decode(readAll(p.getInputStream()));
-            int code = p.waitFor();
-            if (code != 0 || out.trim().isEmpty()) {
-                throw new IOException(out.trim().isEmpty() ? "CFR 返回空" : out.trim());
-            }
-            return out;
-        } catch (InterruptedException ie) {
-            p.destroyForcibly();
-            Thread.currentThread().interrupt();
-            throw new IOException(ie);
-        } finally {
-            if (p.isAlive()) p.destroyForcibly();   // 防止子进程（CFR/java）泄漏
-        }
+        String out = runProcessWithTimeout(pb, "CFR");
+        if (out.trim().isEmpty()) throw new IOException("CFR 返回空");
+        return out;
     }
 
     private String javap(File classFile) throws IOException {
@@ -322,19 +401,9 @@ public final class Decompiler {
         ProcessBuilder pb = new ProcessBuilder(javapBin(), "-p", "-c", classFile.getAbsolutePath());
         // P1-3：stderr 并入 stdout 单流读取，消除双管道死锁（javap 子进程）。
         pb.redirectErrorStream(true);
-        Process p = pb.start();
-        try {
-            String out = decode(readAll(p.getInputStream()));
-            int code = p.waitFor();
-            if (code != 0) throw new IOException(out.trim().isEmpty() ? "javap 失败" : out.trim());
-            return "// [降级] javap 签名级反编译（环境无 CFR）\n" + out;
-        } catch (InterruptedException ie) {
-            p.destroyForcibly();
-            Thread.currentThread().interrupt();
-            throw new IOException(ie);
-        } finally {
-            if (p.isAlive()) p.destroyForcibly();   // 防止子进程（javap/java）泄漏
-        }
+        String out = runProcessWithTimeout(pb, "javap");
+        if (out.trim().isEmpty()) throw new IOException("javap 返回空");
+        return "// [降级] javap 签名级反编译（环境无 CFR）\n" + out;
     }
 
     /** 对单个 key 做双栏源码 diff（默认规则）。

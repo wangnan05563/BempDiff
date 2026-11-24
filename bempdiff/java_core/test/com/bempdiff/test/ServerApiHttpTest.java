@@ -298,6 +298,64 @@ public final class ServerApiHttpTest {
         }
     }
 
+    /** T06218 /api/review：PUT 聚合/落盘、GET 回读、非法 jobId 400、方法 405、DELETE 清理。 */
+    public void testReviewApiRoundTripAndGuards() throws Exception {
+        Path tmp = Files.createTempDirectory("bdf-review-api");
+        String oldDir = System.getProperty("bempdiff.reviewDir");
+        try {
+            Path reviews = tmp.resolve("reviews");
+            System.setProperty("bempdiff.reviewDir", reviews.toString());
+            ServerConfig config = newConfig(tmp);
+            ServerTestHarness.Server s = launch(config, Files.createDirectories(tmp.resolve("webroot")));
+
+            Map<String, Object> file = new LinkedHashMap<>();
+            file.put("hunkTotal", 2);
+            Map<String, Object> hunks = new LinkedHashMap<>();
+            hunks.put("0", "reviewed");
+            hunks.put("1", "unreviewed");
+            file.put("hunks", hunks);
+            file.put("lines", List.of(1));
+            Map<String, Object> files = new LinkedHashMap<>();
+            files.put("a/Foo.class", file);
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("files", files);
+            body.put("jobId", "spoofed-should-be-overridden");
+
+            HttpResponse<String> put = s.put("/api/review/job-api-test", com.bempdiff.server.Json.write(body));
+            Asserts.assertEquals("PUT 应 200", 200, put.statusCode());
+            Map<String, Object> pj = json(put);
+            Asserts.assertEquals("路径 jobId 权威", "job-api-test", pj.get("jobId"));
+            Asserts.assertEquals("exists", Boolean.TRUE, pj.get("exists"));
+            Map<?, ?> sum = (Map<?, ?>) pj.get("summary");
+            Asserts.assertEquals("inProgressFiles", 1, ((Number) sum.get("inProgressFiles")).intValue());
+            Asserts.assertEquals("totalHunks", 2, ((Number) sum.get("totalHunks")).intValue());
+            Asserts.assertTrue("应落盘到 reviewDir", Files.isRegularFile(reviews.resolve("job-api-test.json")));
+
+            HttpResponse<String> get = s.get("/api/review/job-api-test");
+            Asserts.assertEquals("GET 应 200", 200, get.statusCode());
+            Map<String, Object> gj = json(get);
+            Asserts.assertEquals("GET exists", Boolean.TRUE, gj.get("exists"));
+            Map<?, ?> gf = (Map<?, ?>) ((Map<?, ?>) gj.get("files")).get("a/Foo.class");
+            Asserts.assertEquals("部分 Hunk → in_progress", "in_progress", gf.get("status"));
+
+            HttpResponse<String> bad = s.get("/api/review/%2e%2e%2fescape");
+            Asserts.assertEquals("非法 jobId 应 400", 400, bad.statusCode());
+
+            HttpResponse<String> method = s.post("/api/review/job-api-test", "{}");
+            Asserts.assertEquals("POST 应 405", 405, method.statusCode());
+            Asserts.assertEquals("OPTIONS 应 204", 204, s.options("/api/review/job-api-test").statusCode());
+
+            HttpResponse<String> del = s.del("/api/review/job-api-test");
+            Asserts.assertEquals("DELETE 应 200", 200, del.statusCode());
+            Asserts.assertFalse("文件应删除", Files.exists(reviews.resolve("job-api-test.json")));
+            Asserts.assertEquals("删后 GET exists=false", Boolean.FALSE, json(s.get("/api/review/job-api-test")).get("exists"));
+        } finally {
+            if (oldDir == null) System.clearProperty("bempdiff.reviewDir");
+            else System.setProperty("bempdiff.reviewDir", oldDir);
+            deleteTree(tmp);
+        }
+    }
+
     private static void deleteTree(Path dir) {
         try (java.util.stream.Stream<Path> st = Files.walk(dir)) {
             List<Path> ps = new ArrayList<>();

@@ -3,7 +3,7 @@
 // 状态栏不再为失败的比对渲染版本号，以及 toast 前缀不重复。
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { state, runCompare } from '../store'
+import { state, runCompare, normalizeComparePath } from '../store'
 import { defaultConfig } from '../store'
 import { api } from '../api/client'
 import DiffTree from '../components/DiffTree.vue'
@@ -26,6 +26,7 @@ function freshState() {
   state.propertyNode = null
   state.baseFolder = null
   state.activeKey = null
+  state.sameInputCompare = false
   state.oldPath = 'D:/pkgs/demo_v1.war'
   state.newPath = 'D:/pkgs/__no_such__.war'
 }
@@ -40,12 +41,28 @@ describe('DiffTree 空态三态区分（T03669）', () => {
     w.unmount()
   })
 
-  it('比对完成但两包完全一致：明确说「完全一致」，不与未比对混用同一句', () => {
-    state.job = { jobId: 'j1', tree: [], stats: { added: 0, deleted: 0, modified: 0, unchanged: 0 } }
+  it('比对完成但两包完全一致：即使存在被过滤的「未变」条目，也必须给出「完全一致」结论', () => {
+    state.job = { jobId: 'j1', tree: [{ key: 'a.txt', status: 'UNCHANGED' }], stats: { added: 0, deleted: 0, modified: 0, unchanged: 1 } }
     const w = mount(DiffTree)
     expect(w.text()).toContain('两个包完全一致')
     expect(w.text()).not.toContain('尚未开始比对')
+    expect(w.text()).not.toContain('没有匹配的条目')
     w.unmount()
+  })
+
+  it('同一输入自比对：0 差异不能表述成「两个包完全一致」', () => {
+    state.job = { jobId: 'j2', tree: [], stats: { added: 0, deleted: 0, modified: 0, unchanged: 0 } }
+    state.sameInputCompare = true
+    const w = mount(DiffTree)
+    expect(w.text()).toContain('同一个目录/包')
+    expect(w.text()).not.toContain('两个包完全一致')
+    w.unmount()
+  })
+
+  it('路径归一：Windows 大小写/斜杠/尾斜杠不影响同一输入判定', () => {
+    expect(normalizeComparePath('D:\\Pkgs\\Demo.WAR\\')).toBe(normalizeComparePath('d:/pkgs/demo.war'))
+    expect(normalizeComparePath('/tmp/a/')).toBe(normalizeComparePath('/tmp/a'))
+    expect(normalizeComparePath('/tmp/a')).not.toBe(normalizeComparePath('/tmp/b'))
   })
 
   it('比对失败：常驻红色失败态并显示原因，不再出现「暂无差异」类文案', () => {

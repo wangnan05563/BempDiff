@@ -14,8 +14,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -65,9 +67,9 @@ public final class AssetExporter {
         }
         Files.createDirectories(target.getParent());
         Path statusFile = target.getParent().resolve("." + st.name() + "." + target.getFileName());
-        Files.write(target, bytes);
+        atomicWrite(target, bytes);
         // 标记状态（避免同名覆盖歧义，供人工核对）
-        Files.write(statusFile, (st.name() + " " + k).getBytes(StandardCharsets.UTF_8));
+        atomicWrite(statusFile, (st.name() + " " + k).getBytes(StandardCharsets.UTF_8));
     }
 
     /** ② 差异 jar 目录：仅复制变化的 lib/*.jar（L2 变化）。 */
@@ -97,7 +99,7 @@ public final class AssetExporter {
         }
         byte[] bytes = parser.readEntryBytes(srcSnap, srcEntry);
         Path target = jarsDir.resolve(k.replace("/", "_"));
-        Files.write(target, bytes);
+        atomicWrite(target, bytes);
     }
 
     /** ③ 反编译源码 zip：Top-K 完整源码 + manifest 清单。
@@ -106,8 +108,9 @@ public final class AssetExporter {
                                         int topK) throws IOException {
         Files.createDirectories(outDir);
         Path zip = outDir.resolve("decompiled-sources.zip");
+        Path tmp = Files.createTempFile(outDir, ".decompiled-", ".tmp");
         int shown = 0;
-        try (OutputStream fos = Files.newOutputStream(zip);
+        try (OutputStream fos = Files.newOutputStream(tmp);
              BufferedOutputStream bos = new BufferedOutputStream(fos);
              ZipOutputStream zos = new ZipOutputStream(bos)) {
             StringBuilder manifest = new StringBuilder();
@@ -135,7 +138,11 @@ public final class AssetExporter {
             zos.putNextEntry(new ZipEntry("MANIFEST.txt"));
             zos.write(manifest.toString().getBytes(StandardCharsets.UTF_8));
             zos.closeEntry();
+        } catch (IOException | RuntimeException ex) {
+            Files.deleteIfExists(tmp);
+            throw ex;
         }
+        atomicMove(tmp, zip);
         return zip;
     }
 
@@ -194,28 +201,59 @@ public final class AssetExporter {
             throw new IOException("拒绝越界写文件（Zip Slip）: " + k);
         }
         Files.createDirectories(target.getParent());
-        Files.write(target, bytes);
+        atomicWrite(target, bytes);
     }
 
     /** ⑤ 将导出目录树递归打包为 zip（差异 class/jar/全量目录 + 反编译源码包统一归档）。
-     *  保留相对路径；跳过 zipOut 自身，避免迭代写入自身。 */
+     *  保留相对路径；跳过 zipOut 自身，避免迭代写入自身；先写临时文件再原子落位，失败不覆盖旧包。 */
     public Path zipTree(Path root, Path zipOut) throws IOException {
-        try (OutputStream fos = Files.newOutputStream(zipOut);
+        Files.createDirectories(zipOut.toAbsolutePath().getParent());
+        Path tmp = Files.createTempFile(zipOut.toAbsolutePath().getParent(), ".bdfzip-", ".tmp");
+        try (OutputStream fos = Files.newOutputStream(tmp);
              BufferedOutputStream bos = new BufferedOutputStream(fos);
              ZipOutputStream zos = new ZipOutputStream(bos);
              // Files.walk 返回的资源 Stream 必须随 try-with-resources 关闭，否则文件句柄在 ZIP 写出期间持续打开
              java.util.stream.Stream<Path> walk = Files.walk(root)) {
-            walk.filter(Files::isRegularFile).filter(p -> !p.equals(zipOut)).forEach(p -> {
-                try {
-                    String rel = root.relativize(p).toString().replace('\\', '/');
-                    zos.putNextEntry(new ZipEntry(rel));
-                    Files.copy(p, zos);
-                    zos.closeEntry();
-                } catch (IOException e) {
-                    throw new UncheckedIOException(e);
-                }
-            });
+            walk.filter(Files::isRegularFile)
+                .filter(p -> !p.equals(zipOut) && !p.equals(tmp))
+                .forEach(p -> {
+                    try {
+                        String rel = root.relativize(p).toString().replace('\\', '/');
+                        zos.putNextEntry(new ZipEntry(rel));
+                        Files.copy(p, zos);
+                        zos.closeEntry();
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                });
+        } catch (IOException | RuntimeException ex) {
+            Files.deleteIfExists(tmp);
+            throw ex;
         }
+        atomicMove(tmp, zipOut);
         return zipOut;
+    }
+
+    /** 原子落盘：先写同目录临时文件，再 move 覆盖目标；异常时清理临时文件，避免半成品覆盖旧导出。 */
+    static void atomicWrite(Path target, byte[] bytes) throws IOException {
+        Path parent = target.toAbsolutePath().getParent();
+        Files.createDirectories(parent);
+        Path tmp = Files.createTempFile(parent, ".bdf-", ".tmp");
+        try {
+            Files.write(tmp, bytes);
+            atomicMove(tmp, target);
+        } catch (IOException | RuntimeException ex) {
+            Files.deleteIfExists(tmp);
+            throw ex;
+        }
+    }
+
+    /** ATOMIC_MOVE 在跨文件系统/部分 FS 不支持时降级为普通 REPLACE_EXISTING（仍保证目标不被截断）。 */
+    static void atomicMove(Path tmp, Path target) throws IOException {
+        try {
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException unsupported) {
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 }

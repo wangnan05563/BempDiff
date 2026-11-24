@@ -1,9 +1,41 @@
 <!DOCTYPE html>
-<html lang="zh-CN" data-bs-theme="light">
+<html lang="zh-CN" data-bs-theme="light" data-theme="system" data-token-theme="light" data-token-pref="system">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>差异化对比工具</title>
+    <!--
+      TH-09：首帧主题注入。必须位于所有样式表之前——Bootstrap CSS 加载前先把 html 背景色与
+      color-scheme 定到目标主题，避免暗色偏好用户看到「先白后黑」的闪白。
+      偏好 key 与 store.js 的 `bempdiff-theme` 保持一致；system 用 matchMedia 同步解析。
+    -->
+    <script>
+      (function () {
+        try {
+          // TH-02：6 主题首帧表与 src/styles/tokens.css 的 :root/[data-token-theme] 保持同值；
+          // Bootstrap 只认 light/dark，午夜/高对比走 dark 底座，护眼走 light 底座。
+          var THEMES = {
+            light:    { mode: 'light', bg: '#ffffff', fg: '#212529' },
+            dark:     { mode: 'dark',  bg: '#212529', fg: '#dee2e6' },
+            midnight: { mode: 'dark',  bg: '#0b1020', fg: '#e6edf7' },
+            paper:    { mode: 'light', bg: '#f7f3e8', fg: '#2b2a26' },
+            contrast: { mode: 'dark',  bg: '#000000', fg: '#ffffff' }
+          };
+          var pref = localStorage.getItem('bempdiff-theme') || 'system';
+          var systemDark = !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var tokenTheme = pref === 'system' ? (systemDark ? 'dark' : 'light') : pref;
+          var t = THEMES[tokenTheme] || THEMES.light;
+          if (!THEMES[tokenTheme]) tokenTheme = 'light';
+          document.documentElement.setAttribute('data-bs-theme', t.mode);
+          document.documentElement.setAttribute('data-theme', tokenTheme);
+          document.documentElement.setAttribute('data-token-theme', tokenTheme);
+          document.documentElement.setAttribute('data-token-pref', pref);
+          document.documentElement.style.colorScheme = t.mode;
+          document.documentElement.style.backgroundColor = t.bg;
+          document.documentElement.style.color = t.fg;
+        } catch (_) { /* localStorage 不可用时按浅色兜底 */ }
+      })();
+    </script>
     <link rel="stylesheet" href="/vendor/bootstrap.min.css" />
     <link rel="stylesheet" href="/vendor/bootstrap-icons.css" />
   </head>

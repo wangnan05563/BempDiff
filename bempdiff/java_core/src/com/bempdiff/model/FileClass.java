@@ -3,6 +3,7 @@ package com.bempdiff.model;
 /** 文件分类（FR2.3）。对应 prototype: classify。
  *  JS/HTML/CSS 为"前端源码文本"，纳入内容 diff 与 AI 分析（FR4.4 增强）；
  *  JSP(.jsp/.jspx/.tag/.tagx) 为服务端页面/标签文件，同样纳入内容级逐行 diff（本需求扩展）；
+ *  JAVA(.java) 为目录模式源码文件，纳入内容级逐行 diff 与报告源码章节；
  *  CONFIG(.xml/.properties/.yml/.json/.tld/.xhtml/.vm/.ftl 等) 为文本配置/描述符，纳入内容 diff；
  *  其余 STATIC（图片/字体/二进制）仅比对 sha256 与大小（FR4.8）；OTHER 为未识别兜底。 */
 public enum FileClass {
@@ -18,6 +19,8 @@ public enum FileClass {
     CSS,
     /** 服务端 JSP 页面 / 标签文件（.jsp/.jspx/.tag/.tagx）。需求扩展：纳入内容级逐行 diff。 */
     JSP,
+    /** Java 源码（.java，目录模式常见）。纳入内容级逐行 diff，报告第四节展示源码改动。 */
+    JAVA,
     /**
      * 归档压缩包（.zip / .war / .ear / .tar / .tar.gz / .tgz）。
      * 这类文件是二进制，按字节解码再"美化"会得到一堆乱码并长时间跑 JS 状态机，
@@ -50,7 +53,7 @@ public enum FileClass {
 
     /** 是否为"可内容 diff 的文本资源"——CONFIG/JSP/前端源码均纳入内容级逐行比对（区别于二进制 STATIC）。 */
     public boolean isTextDiffable() {
-        return this == CONFIG || this == JSP || this == JS || this == HTML || this == CSS;
+        return this == CONFIG || this == JSP || this == JAVA || this == JS || this == HTML || this == CSS;
     }
 
     /** 报告/统计用的中文归类标签（用于按文件类型汇总 新增/删除/修改）。 */
@@ -60,6 +63,7 @@ public enum FileClass {
             case JAR:   return "依赖 JAR";
             case CONFIG:return "配置文件(XML/Properties)";
             case JSP:   return "JSP 页面/标签";
+            case JAVA:  return "Java 源码";
             case JS:    return "前端 JS";
             case HTML:  return "前端 HTML";
             case CSS:   return "前端 CSS";

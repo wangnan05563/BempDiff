@@ -14,16 +14,17 @@
 /** 产品名称（展示用）。 */
 export const PRODUCT_NAME = 'BempDiff'
 
-/** 产品版本（Web UI 版本；桌面壳如暴露 appVersion 则运行时优先取壳层版本）。 */
-export const APP_VERSION = '0.1.0'
+/** 产品版本（与安装包 dev-shell/package.json 的 version 对齐；桌面壳暴露 appVersion 时运行时优先取壳层版本）。
+ *  浏览器模式没有壳层注入，若此处滞后会显示「版本回退」，故发布递增任务版本时须同步本常量（helpDoc.spec 有断言防漂移）。 */
+export const APP_VERSION = '0.2.0'
 
 /** 帮助内容版本：与 APP_VERSION 保持同套主·次版本口径（内容随产品演进同步递增），
  *  仅当主版本不一致时提示「内容可能滞后」。 */
-export const DOC_VERSION = '0.1'
+export const DOC_VERSION = '0.2'
 
 /**
  * 运行时解析「当前产品版本」：优先取桌面壳暴露的 appVersion（版本最贴近安装包），
- * 否则回落到内置 APP_VERSION。这样即使壳层暂未暴露版本号，也能给出可用的版本标注。
+ * 否则回落到内置 APP_VERSION（已与安装包版本对齐）。这样即使壳层暂未暴露版本号，也能给出可信的版本标注。
  */
 export function resolveAppVersion() {
   try {

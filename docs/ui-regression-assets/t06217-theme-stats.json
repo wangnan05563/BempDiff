@@ -1,0 +1,308 @@
+[
+  {
+    "theme": "light",
+    "pref": "light",
+    "bs": "light",
+    "appChildren": 4,
+    "root": {
+      "bg": "rgb(255, 255, 255)",
+      "fg": "rgb(33, 37, 41)"
+    },
+    "body": {
+      "bg": "rgb(255, 255, 255)",
+      "fg": "rgb(33, 37, 41)",
+      "border": "rgb(33, 37, 41)"
+    },
+    "toolbar": {
+      "bg": "rgb(248, 249, 250)",
+      "fg": "rgb(33, 37, 41)",
+      "border": "rgb(33, 37, 41)"
+    },
+    "footer": {
+      "bg": "rgb(248, 249, 250)",
+      "fg": "rgb(108, 117, 125)",
+      "border": "rgb(222, 226, 230)"
+    },
+    "paneHead": {
+      "bg": "rgb(248, 249, 250)",
+      "fg": "rgb(33, 37, 41)",
+      "border": "rgb(33, 37, 41)"
+    },
+    "tree": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(33, 37, 41)",
+      "border": "rgb(33, 37, 41)"
+    },
+    "diff": {
+      "bg": "rgb(255, 255, 255)",
+      "fg": "rgb(108, 117, 125)",
+      "border": "rgb(108, 117, 125)"
+    },
+    "form": {
+      "bg": "rgb(255, 255, 255)",
+      "fg": "rgb(33, 37, 41)",
+      "border": "rgb(222, 226, 230)"
+    },
+    "button": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(108, 117, 125)",
+      "border": "rgba(0, 0, 0, 0)"
+    },
+    "guide": false
+  },
+  {
+    "theme": "dark",
+    "pref": "dark",
+    "bs": "dark",
+    "appChildren": 4,
+    "root": {
+      "bg": "rgb(33, 37, 41)",
+      "fg": "rgb(222, 226, 230)"
+    },
+    "body": {
+      "bg": "rgb(33, 37, 41)",
+      "fg": "rgb(222, 226, 230)",
+      "border": "rgb(222, 226, 230)"
+    },
+    "toolbar": {
+      "bg": "rgb(43, 48, 53)",
+      "fg": "rgb(222, 226, 230)",
+      "border": "rgb(222, 226, 230)"
+    },
+    "footer": {
+      "bg": "rgb(43, 48, 53)",
+      "fg": "rgb(173, 181, 189)",
+      "border": "rgb(73, 80, 87)"
+    },
+    "paneHead": {
+      "bg": "rgb(43, 48, 53)",
+      "fg": "rgb(222, 226, 230)",
+      "border": "rgb(222, 226, 230)"
+    },
+    "tree": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(222, 226, 230)",
+      "border": "rgb(222, 226, 230)"
+    },
+    "diff": {
+      "bg": "rgb(33, 37, 41)",
+      "fg": "rgb(173, 181, 189)",
+      "border": "rgb(173, 181, 189)"
+    },
+    "form": {
+      "bg": "rgb(33, 37, 41)",
+      "fg": "rgb(222, 226, 230)",
+      "border": "rgb(73, 80, 87)"
+    },
+    "button": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(173, 181, 189)",
+      "border": "rgba(0, 0, 0, 0)"
+    },
+    "guide": false
+  },
+  {
+    "theme": "midnight",
+    "pref": "midnight",
+    "bs": "dark",
+    "appChildren": 4,
+    "root": {
+      "bg": "rgb(11, 16, 32)",
+      "fg": "rgb(230, 237, 247)"
+    },
+    "body": {
+      "bg": "rgb(11, 16, 32)",
+      "fg": "rgb(230, 237, 247)",
+      "border": "rgb(230, 237, 247)"
+    },
+    "toolbar": {
+      "bg": "rgb(18, 26, 46)",
+      "fg": "rgb(230, 237, 247)",
+      "border": "rgb(230, 237, 247)"
+    },
+    "footer": {
+      "bg": "rgb(18, 26, 46)",
+      "fg": "rgb(154, 167, 189)",
+      "border": "rgb(42, 54, 82)"
+    },
+    "paneHead": {
+      "bg": "rgb(18, 26, 46)",
+      "fg": "rgb(230, 237, 247)",
+      "border": "rgb(230, 237, 247)"
+    },
+    "tree": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(230, 237, 247)",
+      "border": "rgb(230, 237, 247)"
+    },
+    "diff": {
+      "bg": "rgb(11, 16, 32)",
+      "fg": "rgb(154, 167, 189)",
+      "border": "rgb(154, 167, 189)"
+    },
+    "form": {
+      "bg": "rgb(11, 16, 32)",
+      "fg": "rgb(230, 237, 247)",
+      "border": "rgb(42, 54, 82)"
+    },
+    "button": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(154, 167, 189)",
+      "border": "rgba(0, 0, 0, 0)"
+    },
+    "guide": false
+  },
+  {
+    "theme": "paper",
+    "pref": "paper",
+    "bs": "light",
+    "appChildren": 4,
+    "root": {
+      "bg": "rgb(247, 243, 232)",
+      "fg": "rgb(43, 42, 38)"
+    },
+    "body": {
+      "bg": "rgb(247, 243, 232)",
+      "fg": "rgb(43, 42, 38)",
+      "border": "rgb(43, 42, 38)"
+    },
+    "toolbar": {
+      "bg": "rgb(239, 232, 216)",
+      "fg": "rgb(43, 42, 38)",
+      "border": "rgb(43, 42, 38)"
+    },
+    "footer": {
+      "bg": "rgb(239, 232, 216)",
+      "fg": "rgb(107, 102, 92)",
+      "border": "rgb(216, 205, 184)"
+    },
+    "paneHead": {
+      "bg": "rgb(239, 232, 216)",
+      "fg": "rgb(43, 42, 38)",
+      "border": "rgb(43, 42, 38)"
+    },
+    "tree": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(43, 42, 38)",
+      "border": "rgb(43, 42, 38)"
+    },
+    "diff": {
+      "bg": "rgb(247, 243, 232)",
+      "fg": "rgb(107, 102, 92)",
+      "border": "rgb(107, 102, 92)"
+    },
+    "form": {
+      "bg": "rgb(247, 243, 232)",
+      "fg": "rgb(43, 42, 38)",
+      "border": "rgb(216, 205, 184)"
+    },
+    "button": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(107, 102, 92)",
+      "border": "rgba(0, 0, 0, 0)"
+    },
+    "guide": false
+  },
+  {
+    "theme": "contrast",
+    "pref": "contrast",
+    "bs": "dark",
+    "appChildren": 4,
+    "root": {
+      "bg": "rgb(0, 0, 0)",
+      "fg": "rgb(255, 255, 255)"
+    },
+    "body": {
+      "bg": "rgb(0, 0, 0)",
+      "fg": "rgb(255, 255, 255)",
+      "border": "rgb(255, 255, 255)"
+    },
+    "toolbar": {
+      "bg": "rgb(0, 0, 0)",
+      "fg": "rgb(255, 255, 255)",
+      "border": "rgb(255, 255, 255)"
+    },
+    "footer": {
+      "bg": "rgb(0, 0, 0)",
+      "fg": "rgb(255, 255, 255)",
+      "border": "rgb(255, 255, 255)"
+    },
+    "paneHead": {
+      "bg": "rgb(0, 0, 0)",
+      "fg": "rgb(255, 255, 255)",
+      "border": "rgb(255, 255, 255)"
+    },
+    "tree": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(255, 255, 255)",
+      "border": "rgb(255, 255, 255)"
+    },
+    "diff": {
+      "bg": "rgb(0, 0, 0)",
+      "fg": "rgb(255, 255, 255)",
+      "border": "rgb(255, 255, 255)"
+    },
+    "form": {
+      "bg": "rgb(0, 0, 0)",
+      "fg": "rgb(255, 255, 255)",
+      "border": "rgb(255, 255, 255)"
+    },
+    "button": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(255, 255, 255)",
+      "border": "rgba(0, 0, 0, 0)"
+    },
+    "guide": false
+  },
+  {
+    "theme": "light",
+    "pref": "system",
+    "bs": "light",
+    "appChildren": 4,
+    "root": {
+      "bg": "rgb(255, 255, 255)",
+      "fg": "rgb(33, 37, 41)"
+    },
+    "body": {
+      "bg": "rgb(255, 255, 255)",
+      "fg": "rgb(33, 37, 41)",
+      "border": "rgb(33, 37, 41)"
+    },
+    "toolbar": {
+      "bg": "rgb(248, 249, 250)",
+      "fg": "rgb(33, 37, 41)",
+      "border": "rgb(33, 37, 41)"
+    },
+    "footer": {
+      "bg": "rgb(248, 249, 250)",
+      "fg": "rgb(108, 117, 125)",
+      "border": "rgb(222, 226, 230)"
+    },
+    "paneHead": {
+      "bg": "rgb(248, 249, 250)",
+      "fg": "rgb(33, 37, 41)",
+      "border": "rgb(33, 37, 41)"
+    },
+    "tree": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(33, 37, 41)",
+      "border": "rgb(33, 37, 41)"
+    },
+    "diff": {
+      "bg": "rgb(255, 255, 255)",
+      "fg": "rgb(108, 117, 125)",
+      "border": "rgb(108, 117, 125)"
+    },
+    "form": {
+      "bg": "rgb(255, 255, 255)",
+      "fg": "rgb(33, 37, 41)",
+      "border": "rgb(222, 226, 230)"
+    },
+    "button": {
+      "bg": "rgba(0, 0, 0, 0)",
+      "fg": "rgb(108, 117, 125)",
+      "border": "rgba(0, 0, 0, 0)"
+    },
+    "guide": false
+  }
+]

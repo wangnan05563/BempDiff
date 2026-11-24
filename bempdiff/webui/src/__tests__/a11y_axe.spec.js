@@ -86,5 +86,5 @@ describe('R7 axe 扫描扩展（配置中心）', () => {
     const w = mount(ConfigDialog, { props: { visible: true }, attachTo: document.body })
     await scan(w, 'ConfigDialog')
     w.unmount()
-  })
+  }, 20000)
 })

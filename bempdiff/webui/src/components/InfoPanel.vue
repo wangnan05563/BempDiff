@@ -194,7 +194,8 @@ function onGenerateReport(category) {
 <style scoped>
 /* 5 个内容子视图 tab：窄屏下不换行，改为单行横向滚动，
  * 既保持 tab 栏整洁，又避免换行挤占控制台纵向高度（布局优化的核心诉求）。 */
-.nav-tabs { flex-wrap: nowrap; overflow-x: auto; }
+/* 窄面板（英文标签更长）下允许换行，保证 5 个 tab 全部可读；宽面板仍是一行。 */
+.nav-tabs { flex-wrap: wrap; row-gap: 2px; }
 .nav-tabs .nav-link { white-space: nowrap; flex-shrink: 0; padding-left: .55rem; padding-right: .55rem; }
 /* 细滚动条，保持视觉干净 */
 .nav-tabs::-webkit-scrollbar { height: 4px; }

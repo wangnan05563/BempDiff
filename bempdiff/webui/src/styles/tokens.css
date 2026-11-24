@@ -1,0 +1,319 @@
+/* M2/REQ-013 语义 Token 层（T06215）
+ * 组件只消费 --bdf-*；主题值由 tokenRegistry.js 校验后在此落成 CSS 变量。
+ * 注意：主题只覆盖颜色，间距/圆角/字体共享，避免 6 套主题各自漂移。
+ */
+:root,
+[data-token-theme="light"] {
+  --bdf-space-xxs: 2px;
+  --bdf-space-xs: 4px;
+  --bdf-space-sm: 8px;
+  --bdf-space-md: 12px;
+  --bdf-space-lg: 16px;
+  --bdf-space-xl: 24px;
+  --bdf-radius-sm: 4px;
+  --bdf-radius-md: 6px;
+  --bdf-radius-lg: 10px;
+  --bdf-radius-pill: 999px;
+  --bdf-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --bdf-font-size-xs: 11px;
+  --bdf-font-size-sm: 12px;
+  --bdf-font-size-md: 13px;
+  --bdf-font-size-lg: 15px;
+  --bdf-font-weight-strong: 600;
+
+  --bdf-canvas: #ffffff;
+  --bdf-surface: #f8f9fa;
+  --bdf-surface-raised: #ffffff;
+  --bdf-text: #212529;
+  --bdf-text-muted: #6c757d;
+  --bdf-border: #dee2e6;
+  --bdf-accent: #0d6efd;
+  --bdf-on-accent: #ffffff;
+  --bdf-focus-ring: #0b5ed7;
+  --bdf-diff-add-bg: #e6ffed;
+  --bdf-diff-add-fg: #116329;
+  --bdf-diff-del-bg: #ffebe9;
+  --bdf-diff-del-fg: #82071e;
+  --bdf-diff-mod-bg: #fff8c5;
+  --bdf-diff-mod-fg: #7d4e00;
+  --bdf-risk-breaking: #dc3545;
+  --bdf-risk-high: #fd7e14;
+  --bdf-risk-medium: #ffc107;
+  --bdf-risk-low: #198754;
+  --bdf-risk-none: #6c757d;
+}
+
+[data-token-theme="dark"] {
+  --bdf-canvas: #212529;
+  --bdf-surface: #2b3035;
+  --bdf-surface-raised: #343a40;
+  --bdf-text: #dee2e6;
+  --bdf-text-muted: #adb5bd;
+  --bdf-border: #495057;
+  --bdf-accent: #4dabf7;
+  --bdf-on-accent: #0b1220;
+  --bdf-focus-ring: #74c0fc;
+  --bdf-diff-add-bg: #033a1f;
+  --bdf-diff-add-fg: #75b798;
+  --bdf-diff-del-bg: #4a0d14;
+  --bdf-diff-del-fg: #f1aeb5;
+  --bdf-diff-mod-bg: #3d3200;
+  --bdf-diff-mod-fg: #ffda6a;
+  --bdf-risk-breaking: #ff6b6b;
+  --bdf-risk-high: #ffa94d;
+  --bdf-risk-medium: #ffd43b;
+  --bdf-risk-low: #69db7c;
+  --bdf-risk-none: #adb5bd;
+}
+
+[data-token-theme="midnight"] {
+  --bdf-canvas: #0b1020;
+  --bdf-surface: #121a2e;
+  --bdf-surface-raised: #1a2440;
+  --bdf-text: #e6edf7;
+  --bdf-text-muted: #9aa7bd;
+  --bdf-border: #2a3652;
+  --bdf-accent: #7aa2ff;
+  --bdf-on-accent: #081020;
+  --bdf-focus-ring: #91b4ff;
+  --bdf-diff-add-bg: #0c2e22;
+  --bdf-diff-add-fg: #8ce3b4;
+  --bdf-diff-del-bg: #3a1020;
+  --bdf-diff-del-fg: #ff9eb5;
+  --bdf-diff-mod-bg: #332a10;
+  --bdf-diff-mod-fg: #ffe08a;
+  --bdf-risk-breaking: #ff6b8a;
+  --bdf-risk-high: #ffa94d;
+  --bdf-risk-medium: #ffd43b;
+  --bdf-risk-low: #63e6be;
+  --bdf-risk-none: #9aa7bd;
+}
+
+[data-token-theme="paper"] {
+  --bdf-canvas: #f7f3e8;
+  --bdf-surface: #efe8d8;
+  --bdf-surface-raised: #fffaf0;
+  --bdf-text: #2b2a26;
+  --bdf-text-muted: #6b665c;
+  --bdf-border: #d8cdb8;
+  --bdf-accent: #8a5a2b;
+  --bdf-on-accent: #fffaf0;
+  --bdf-focus-ring: #8a5a2b;
+  --bdf-diff-add-bg: #e4f3d8;
+  --bdf-diff-add-fg: #24552a;
+  --bdf-diff-del-bg: #f7ded6;
+  --bdf-diff-del-fg: #7c2d12;
+  --bdf-diff-mod-bg: #f5e8bd;
+  --bdf-diff-mod-fg: #6b4a00;
+  --bdf-risk-breaking: #b3261e;
+  --bdf-risk-high: #c26a00;
+  --bdf-risk-medium: #a97900;
+  --bdf-risk-low: #2f6b3a;
+  --bdf-risk-none: #6b665c;
+}
+
+[data-token-theme="contrast"] {
+  --bdf-canvas: #000000;
+  --bdf-surface: #000000;
+  --bdf-surface-raised: #111111;
+  --bdf-text: #ffffff;
+  --bdf-text-muted: #ffffff;
+  --bdf-border: #ffffff;
+  --bdf-accent: #ffff00;
+  --bdf-on-accent: #000000;
+  --bdf-focus-ring: #00ffff;
+  --bdf-diff-add-bg: #003300;
+  --bdf-diff-add-fg: #00ff00;
+  --bdf-diff-del-bg: #330000;
+  --bdf-diff-del-fg: #ff5555;
+  --bdf-diff-mod-bg: #333300;
+  --bdf-diff-mod-fg: #ffff00;
+  --bdf-risk-breaking: #ff5555;
+  --bdf-risk-high: #ffaa00;
+  --bdf-risk-medium: #ffff00;
+  --bdf-risk-low: #00ff66;
+  --bdf-risk-none: #ffffff;
+}
+
+@media (prefers-contrast: more) {
+  :root:not([data-token-theme]) {
+    --bdf-border: #000000;
+    --bdf-focus-ring: #000000;
+  }
+}
+
+/* =====================================================================
+ * TH-02 六主题：把 Bootstrap surface/text/border 变量映射到 Token。
+ * Bootstrap 只提供 light/dark 两套底座；午夜/护眼/高对比靠这层覆盖，
+ * 保证 12 核心组件之外的 Bootstrap 原生组件也不会留下未着色白块。
+ * ===================================================================== */
+html[data-token-theme] {
+  --bs-body-bg: var(--bdf-canvas);
+  --bs-body-color: var(--bdf-text);
+  --bs-emphasis-color: var(--bdf-text);
+  --bs-heading-color: var(--bdf-text);
+  --bs-secondary-color: var(--bdf-text-muted);
+  --bs-secondary-bg: var(--bdf-surface-raised);
+  --bs-tertiary-bg: var(--bdf-surface);
+  --bs-border-color: var(--bdf-border);
+  --bs-border-color-translucent: color-mix(in srgb, var(--bdf-border) 60%, transparent);
+  --bs-link-color: var(--bdf-accent);
+  --bs-link-hover-color: color-mix(in srgb, var(--bdf-accent) 82%, var(--bdf-text));
+  --bs-code-color: var(--bdf-syntax-code);
+  --bs-primary: var(--bdf-accent);
+  --bs-primary-bg-subtle: color-mix(in srgb, var(--bdf-accent) 14%, transparent);
+  --bs-primary-border-subtle: color-mix(in srgb, var(--bdf-accent) 35%, transparent);
+  --bs-success: var(--bdf-risk-low);
+  --bs-success-bg-subtle: color-mix(in srgb, var(--bdf-risk-low) 14%, transparent);
+  --bs-danger: var(--bdf-risk-breaking);
+  --bs-danger-bg-subtle: color-mix(in srgb, var(--bdf-risk-breaking) 14%, transparent);
+  --bs-warning: var(--bdf-risk-medium);
+  --bs-warning-bg-subtle: color-mix(in srgb, var(--bdf-risk-medium) 16%, transparent);
+}
+body { background: var(--bdf-canvas); color: var(--bdf-text); }
+
+/* Bootstrap 5.3 的 bg-body-* 走 --bs-*-bg-rgb 通道，单纯映射 --bs-*-bg 不会改它们的
+ * background-color；六主题下会出现「午夜/护眼/高对比工具栏仍是 light/dark 默认底色」。
+ * 这里直接按 Token 覆盖三个 body 背景 utility，组件不再依赖 Bootstrap 的 RGB 变体。 */
+.bg-body { background-color: var(--bdf-canvas) !important; }
+.bg-body-secondary { background-color: var(--bdf-surface-raised) !important; }
+.bg-body-tertiary { background-color: var(--bdf-surface) !important; }
+
+/* TH-02 验收④：键盘焦点统一用主题 focusRing，高对比主题下仍可见；
+ * 用 outline 而非 border，避免切换/聚焦时产生布局位移。 */
+:where(a, button, input, select, textarea, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--bdf-focus-ring);
+  outline-offset: 2px;
+}
+/* Bootstrap 的 .btn:focus-visible 用更高优先级写了 outline:0，仅靠上面的 :where 规则会被覆盖。 */
+.btn:focus-visible,
+.btn-check:focus-visible + .btn {
+  outline: 2px solid var(--bdf-focus-ring) !important;
+  outline-offset: 2px;
+}
+
+/* =====================================================================
+ * M2/T06216 组件级派生 Token
+ * 仅本文件允许出现字面色值；12 个核心组件只消费 var(--bdf-*)。
+ * 派生 Token 引用主题色，切换主题时自动重算，不需要组件写暗色覆盖。
+ * ===================================================================== */
+:root {
+  /* 浮层/阴影：遮罩统一，避免各对话框各写一套 rgba */
+  --bdf-overlay: rgba(0, 0, 0, .35);
+  --bdf-overlay-strong: rgba(0, 0, 0, .45);
+  --bdf-overlay-soft: rgba(0, 0, 0, .18);
+  --bdf-shadow-color: rgba(0, 0, 0, .05);
+  --bdf-shadow-pop: rgba(0, 0, 0, .12);
+  --bdf-shadow-menu: rgba(0, 0, 0, .18);
+
+  /* 文件类型点缀色（IntelliJ 风格；只作行号/图标/徽标点缀） */
+  --bdf-type-class: #7c5cff;
+  --bdf-type-jar: #9c6ade;
+  --bdf-type-config: #d97706;
+  --bdf-type-js: #c9930e;
+  --bdf-type-html: #d9534f;
+  --bdf-type-css: #1f7fc4;
+  --bdf-type-jsp: #c05621;
+  --bdf-type-office: #0f9d8f;
+  --bdf-type-static: #6b7280;
+  --bdf-type-archive: #8a94a6;
+  --bdf-type-other: #6b7280;
+  --bdf-type-missing: #9ca3af;
+
+  /* 代码语法色（与 diff 红/绿/橙三系刻意错开） */
+  --bdf-syntax-keyword: #7c3aed;
+  --bdf-syntax-string: #b45309;
+  --bdf-syntax-comment: #64748b;
+  --bdf-syntax-number: #0891b2;
+  --bdf-syntax-ident: #475569;
+  --bdf-syntax-function: #2563eb;
+  --bdf-syntax-type: #0891b2;
+  --bdf-syntax-tag: #be185d;
+  --bdf-syntax-attr: #0284c7;
+  --bdf-syntax-heading: #7c3aed;
+  --bdf-syntax-link: #2563eb;
+  --bdf-syntax-code: #b45309;
+  --bdf-syntax-op: #64748b;
+
+  /* AI 思考区块（紫色仅作过程态，不参与风险/差异语义） */
+  --bdf-ai-thinking: #b226ff;
+  --bdf-ai-thinking-soft: rgba(178, 38, 255, .05);
+  --bdf-ai-thinking-line: rgba(178, 38, 255, .35);
+  --bdf-ai-thinking-live: rgba(178, 38, 255, .08);
+  --bdf-ai-thinking-chip: rgba(178, 38, 255, .1);
+  --bdf-ai-thinking-dash: rgba(128, 128, 128, .12);
+
+  /* 查找命中（黄系，独立于风险/差异语义） */
+  --bdf-find-hit: #f5c542;
+  --bdf-find-current: #e0a800;
+
+  /* diff 行级派生色：基于主题 diff 前景色重算，亮/暗/午夜/护眼/高对比自动一致 */
+  --bdf-diff-add-row: color-mix(in srgb, var(--bdf-diff-add-fg) 8%, transparent);
+  --bdf-diff-del-row: color-mix(in srgb, var(--bdf-diff-del-fg) 8%, transparent);
+  --bdf-diff-mod-row: color-mix(in srgb, var(--bdf-diff-mod-fg) 8%, transparent);
+  --bdf-diff-add-sign: color-mix(in srgb, var(--bdf-diff-add-fg) 16%, transparent);
+  --bdf-diff-del-sign: color-mix(in srgb, var(--bdf-diff-del-fg) 16%, transparent);
+  --bdf-diff-mod-sign: color-mix(in srgb, var(--bdf-diff-mod-fg) 10%, transparent);
+  --bdf-diff-add-inline: var(--bdf-diff-add-bg);
+  --bdf-diff-del-inline: var(--bdf-diff-del-bg);
+  --bdf-diff-add-inline-uni: color-mix(in srgb, var(--bdf-diff-add-fg) 36%, transparent);
+  --bdf-diff-del-inline-uni: color-mix(in srgb, var(--bdf-diff-del-fg) 38%, transparent);
+}
+
+/* 暗色系主题：类型色/语法色整体提亮一档，避免深底小字号发灰 */
+[data-token-theme="dark"],
+[data-token-theme="midnight"],
+[data-token-theme="contrast"] {
+  --bdf-type-class: #a78bfa;
+  --bdf-type-jar: #b794f6;
+  --bdf-type-config: #fbbf24;
+  --bdf-type-js: #facc15;
+  --bdf-type-html: #f87171;
+  --bdf-type-css: #60a5fa;
+  --bdf-type-jsp: #fb923c;
+  --bdf-type-office: #2dd4bf;
+  --bdf-type-static: #9ca3af;
+  --bdf-type-archive: #a8b3c7;
+  --bdf-type-other: #9ca3af;
+  --bdf-type-missing: #adb5bd;
+
+  --bdf-syntax-keyword: #c4b5fd;
+  --bdf-syntax-string: #fbbf24;
+  --bdf-syntax-comment: #94a3b8;
+  --bdf-syntax-number: #22d3ee;
+  --bdf-syntax-ident: #cbd5e1;
+  --bdf-syntax-function: #93c5fd;
+  --bdf-syntax-type: #22d3ee;
+  --bdf-syntax-tag: #f9a8d4;
+  --bdf-syntax-attr: #7dd3fc;
+  --bdf-syntax-heading: #c4b5fd;
+  --bdf-syntax-link: #93c5fd;
+  --bdf-syntax-code: #fbbf24;
+  --bdf-syntax-op: #94a3b8;
+}
+
+/* TH-03 色盲安全调色板：组件只读 --bdf-cb-*，暗色在 token 层提亮 */
+[data-diff-palette="colorblind"] {
+  --bdf-cb-add: #0969da;
+  --bdf-cb-del: #bc4c00;
+  --bdf-cb-mod: #8250df;
+  --bdf-cb-add-bg: rgba(9, 105, 218, .08);
+  --bdf-cb-del-bg: rgba(188, 76, 0, .08);
+  --bdf-cb-mod-bg: rgba(130, 80, 223, .08);
+  --bdf-cb-add-sign: rgba(9, 105, 218, .16);
+  --bdf-cb-del-sign: rgba(188, 76, 0, .16);
+  --bdf-cb-mod-sign: rgba(130, 80, 223, .16);
+}
+[data-token-theme="dark"] [data-diff-palette="colorblind"],
+[data-token-theme="midnight"] [data-diff-palette="colorblind"],
+[data-token-theme="contrast"] [data-diff-palette="colorblind"] {
+  --bdf-cb-add: #79c0ff;
+  --bdf-cb-del: #ffa657;
+  --bdf-cb-mod: #d2a8ff;
+  --bdf-cb-add-bg: rgba(121, 192, 255, .10);
+  --bdf-cb-del-bg: rgba(255, 166, 87, .10);
+  --bdf-cb-mod-bg: rgba(210, 168, 255, .10);
+  --bdf-cb-add-sign: rgba(121, 192, 255, .18);
+  --bdf-cb-del-sign: rgba(255, 166, 87, .18);
+  --bdf-cb-mod-sign: rgba(210, 168, 255, .18);
+}

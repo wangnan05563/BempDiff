@@ -120,7 +120,7 @@ public final class DiffTest {
         Asserts.assertContains("内容确不同→修改", r2.get(DiffStatus.MODIFIED).toString(), "script/run.sh");
     }
 
-    /** folder 模式下 .java 源文件归类 OTHER，仅行尾 CRLF/LF 差异应视为无差异（回归 T00834 同源实报：内容一致的 Java 文件被误判有差异）。 */
+    /** folder 模式下 .java 源文件归类 JAVA，仅行尾 CRLF/LF 差异应视为无差异（回归 T00834 同源实报：内容一致的 Java 文件被误判有差异）。 */
     public void testCompute_lineEndingOnlyJavaSrcIsUnchanged() throws Exception {
         java.nio.file.Path oldF = java.nio.file.Files.createTempFile("bempdiff-old-", ".java");
         java.nio.file.Path newF = java.nio.file.Files.createTempFile("bempdiff-new-", ".java");
@@ -128,11 +128,11 @@ public final class DiffTest {
         java.nio.file.Files.write(oldF, body.getBytes(java.nio.charset.StandardCharsets.UTF_8));
         java.nio.file.Files.write(newF, body.replace("\n", "\r\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
         Map<String, LogicalEntry> old = new LinkedHashMap<>();
-        // folder 模式：.java → FileClass.OTHER（Classifier 兜底），EntrySource.outerEntry 指向磁盘真实文件
-        old.put("src/A.java", new LogicalEntry("src/A.java", Layer.L0, FileClass.OTHER,
+        // folder 模式：.java → FileClass.JAVA，EntrySource.outerEntry 指向磁盘真实文件
+        old.put("src/A.java", new LogicalEntry("src/A.java", Layer.L0, FileClass.JAVA,
                 java.nio.file.Files.size(oldF), "sha_old_crlf", new EntrySource(oldF.toString(), null)));
         Map<String, LogicalEntry> now = new LinkedHashMap<>();
-        now.put("src/A.java", new LogicalEntry("src/A.java", Layer.L0, FileClass.OTHER,
+        now.put("src/A.java", new LogicalEntry("src/A.java", Layer.L0, FileClass.JAVA,
                 java.nio.file.Files.size(newF), "sha_new_lf", new EntrySource(newF.toString(), null)));
         DiffResult r = new DiffEngine().compute(snap(old), snap(now));
         Asserts.assertContains("Java 源仅行尾差异→未变(不误判修改)", r.get(DiffStatus.UNCHANGED).toString(), "src/A.java");
@@ -141,7 +141,7 @@ public final class DiffTest {
         // 内容确不同（新增一行）→ 应判修改
         java.nio.file.Files.write(newF, (body + "    private String s;\n").getBytes(java.nio.charset.StandardCharsets.UTF_8));
         Map<String, LogicalEntry> now2 = new LinkedHashMap<>();
-        now2.put("src/A.java", new LogicalEntry("src/A.java", Layer.L0, FileClass.OTHER,
+        now2.put("src/A.java", new LogicalEntry("src/A.java", Layer.L0, FileClass.JAVA,
                 java.nio.file.Files.size(newF), "sha_new2", new EntrySource(newF.toString(), null)));
         DiffResult r2 = new DiffEngine().compute(snap(old), snap(now2));
         Asserts.assertContains("Java 源内容确不同→修改", r2.get(DiffStatus.MODIFIED).toString(), "src/A.java");

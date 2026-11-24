@@ -8,7 +8,7 @@ body { margin: 0; font-size: 13px; font-family: var(--app-font); }
 .brand-mark {
   width: 30px; height: 30px; border-radius: 6px;
   display: inline-flex; align-items: center; justify-content: center;
-  background: var(--bs-primary); color: #fff;
+  background: var(--bdf-accent); color: var(--bdf-on-accent);
 }
 
 .flex-1 { flex: 1 1 auto; min-width: 0; }
@@ -38,8 +38,11 @@ body { margin: 0; font-size: 13px; font-family: var(--app-font); }
 .col-center { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 /* 智能分析栏：固定 380px，与中间 diff 用左边框 + 极淡阴影做层次分离（避免"叠加"观感）。
  * 收起态 44px 极窄，仅留竖排标题与展开入口，把横向空间全部让给对比窗口。 */
-.col-ai { width: 380px; flex: none; display: flex; flex-direction: column; border-left: var(--bs-border-color) solid 1px; transition: width .2s ease; }
-.col-ai:not(.collapsed) { box-shadow: -3px 0 8px rgba(0,0,0,.05); z-index: 1; }
+.col-ai { width: 380px; flex: none; display: flex; flex-direction: column; border-left: var(--bs-border-color) solid 1px; transition: width .2s ease;
+  /* P2-6：显式给整栏铺主题底色。此前栏体透明，Chrome 在 data-bs-theme 切换后
+   * 偶发不重绘其内部的滚动容器，暗色下右栏残留一块白底，滚动后才恢复。 */
+  background: var(--bs-body-bg); }
+.col-ai:not(.collapsed) { box-shadow: -3px 0 8px var(--bdf-shadow-color); z-index: 1; }
 .col-ai.collapsed { width: 44px; min-width: 44px; background: var(--bs-tertiary-bg); }
 
 /* 响应式避让：视口收窄时分析栏主动让宽，避免挤占对比窗口导致"遮挡"观感。
@@ -47,6 +50,45 @@ body { margin: 0; font-size: 13px; font-family: var(--app-font); }
 @media (max-width: 1280px) { .col-ai:not(.collapsed) { width: 340px; } }
 @media (max-width: 1080px) { .col-ai:not(.collapsed) { width: 300px; } }
 @media (max-width: 860px)  { .col-ai:not(.collapsed) { width: 260px; } }
+
+/* ===== T06219 新版工作区 IA 断点（PRD 8.1） =====
+ * ≥1440：左 300 / 右 380；1280–1440：左 280 / 右 320；<1280 右栏默认收起；
+ * 树栏只有用户拖拽过才由 App 传入内联宽度，否则完全交给这里的断点。
+ * `:not(.collapsed)` 保证收起态仍沿用上面的 44px 规则。 */
+.app-main.review-cockpit .col-tree:not(.collapsed) { width: 300px; }
+.app-main.review-cockpit .col-ai:not(.collapsed) { width: 380px; }
+@media (max-width: 1439px) {
+  .app-main.review-cockpit .col-tree:not(.collapsed) { width: 280px; }
+  .app-main.review-cockpit .col-ai:not(.collapsed) { width: 320px; }
+}
+@media (max-width: 1279px) {
+  .app-main.review-cockpit .col-tree:not(.collapsed) { width: 260px; }
+  .app-main.review-cockpit .col-ai:not(.collapsed) { width: 300px; }
+}
+@media (max-width: 1079px) {
+  /* PRD 8.1 <1080：单栏 + 抽屉。左右栏脱离文档流，默认隐藏；由 Compare Bar 入口覆盖打开，
+     中间 diff 始终占满整宽，避免窄屏被 240px 树栏 + 300px 分析栏挤压。 */
+  .app-main.review-cockpit { position: relative; }
+  .app-main.review-cockpit .col-tree:not(.collapsed) {
+    position: absolute; left: 0; top: 0; bottom: 0; z-index: 1200;
+    width: min(320px, 86vw); min-width: 0; display: none; overflow: hidden;
+    background: var(--bs-body-bg); box-shadow: .35rem 0 1rem rgba(0,0,0,.18);
+  }
+  .app-main.review-cockpit.mobile-tree-open .col-tree:not(.collapsed) .dt-toolbar { min-width: 0; }
+  .app-main.review-cockpit.mobile-tree-open .col-tree:not(.collapsed) .dt-toolbar > .d-flex { flex-wrap: wrap; row-gap: .25rem; min-width: 0; }
+  .app-main.review-cockpit.mobile-tree-open .col-tree:not(.collapsed) .dt-toolbar .input-group,
+  .app-main.review-cockpit.mobile-tree-open .col-tree:not(.collapsed) .dt-toolbar .form-control { min-width: 0; }
+  .app-main.review-cockpit.mobile-tree-open .col-tree:not(.collapsed) { display: flex; }
+  .app-main.review-cockpit .col-tree.collapsed { display: none; }
+  .app-main.review-cockpit .vt-handle { display: none !important; }
+  .app-main.review-cockpit .col-ai:not(.collapsed) {
+    position: absolute; right: 0; top: 0; bottom: 0; z-index: 1200;
+    width: min(320px, 88vw); box-shadow: -.35rem 0 1rem rgba(0,0,0,.18);
+  }
+  .app-main.review-cockpit .col-ai.collapsed { display: none; }
+  .app-main.focus-mode.review-cockpit .col-tree,
+  .app-main.focus-mode.review-cockpit .col-ai { display: none !important; }
+}
 .col-ai.collapsed .ai-collapsed-bar {
   flex: 1; display: flex; flex-direction: column; align-items: center;
   padding: .75rem 0; gap: .5rem; cursor: pointer; user-select: none;
@@ -123,12 +165,16 @@ body { margin: 0; font-size: 13px; font-family: var(--app-font); }
 }
 /* 子项不收缩（按钮文字不可被压扁），溢出由父级 flex-wrap 折行解决 */
 .filebar > .filebar-actions > * { flex-shrink: 0; }
+/* T06218 文件级审阅徽标：左侧信息区，窄屏随 filebar 换行，不产生横向滚动（AC-04） */
+.review-badge { font-size: .68rem; font-weight: 500; white-space: nowrap; }
+.review-badge .review-manual { opacity: .82; font-weight: 400; }
+.review-progress { font-size: .7rem; color: var(--bs-secondary-color); white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 .center-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--bs-secondary-color); flex-direction: column; gap: .5rem; text-align: center; padding: 2rem; }
 .center-empty .ico { font-size: 2rem; }
 
 /* ===== 右侧信息面板 ===== */
-.ai-body { flex: 1; overflow: auto; padding: .75rem; min-height: 0; }
+.ai-body { flex: 1; overflow: auto; padding: .75rem; min-height: 0; background: var(--bs-body-bg); }
 .ai-card { border: var(--bs-border-color) solid 1px; border-radius: var(--bs-border-radius); padding: .75rem; margin-bottom: .75rem; background: var(--bs-body-bg); }
 .ai-card h4 { font-size: .95rem; margin: 0 0 .4rem; }
 .kv { font-size: .8rem; color: var(--bs-secondary-color); margin: .2rem 0; }
@@ -145,7 +191,7 @@ ul.tight li { margin: .2rem 0; }
 .badge-fc { font-size: .65rem; }
 
 /* ===== 比对遮罩 ===== */
-.busy-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+.busy-overlay { position: fixed; inset: 0; background: var(--bdf-overlay); display: flex; align-items: center; justify-content: center; z-index: 2000; }
 .busy-card { background: var(--bs-body-bg); border: var(--bs-border-color) solid 1px; border-radius: var(--bs-border-radius); padding: 1.5rem 2rem; display: flex; flex-direction: column; align-items: center; gap: .75rem; }
 
 /* ===== Markdown 渲染（报告预览 / 信息面板章节） ===== */
@@ -176,19 +222,19 @@ ul.tight li { margin: .2rem 0; }
 /* ===== AI 风险严重性着色（报告预览，对标 japi-compliance-checker） =====
  * sev-* 加在报告内 <strong> 上（v-html 内容，须全局）；risk-banner 为顶部汇总条。
  */
-.sev-breaking { background: #dc3545; color: #fff; padding: .05em .4em; border-radius: .25rem; font-weight: 600; }
-.sev-high { background: #fd7e14; color: #fff; padding: .05em .4em; border-radius: .25rem; font-weight: 600; }
-.sev-med { background: #ffc107; color: #212529; padding: .05em .4em; border-radius: .25rem; font-weight: 600; }
-.sev-low { background: #198754; color: #fff; padding: .05em .4em; border-radius: .25rem; font-weight: 600; }
-.sev-none { background: #6c757d; color: #fff; padding: .05em .4em; border-radius: .25rem; font-weight: 600; }
+.sev-breaking { background: var(--bdf-risk-breaking); color: var(--bdf-on-accent); padding: .05em .4em; border-radius: .25rem; font-weight: 600; }
+.sev-high { background: var(--bdf-risk-high); color: var(--bdf-on-accent); padding: .05em .4em; border-radius: .25rem; font-weight: 600; }
+.sev-med { background: var(--bdf-risk-medium); color: var(--bdf-text); padding: .05em .4em; border-radius: .25rem; font-weight: 600; }
+.sev-low { background: var(--bdf-risk-low); color: var(--bdf-on-accent); padding: .05em .4em; border-radius: .25rem; font-weight: 600; }
+.sev-none { background: var(--bdf-risk-none); color: var(--bdf-on-accent); padding: .05em .4em; border-radius: .25rem; font-weight: 600; }
 
 .risk-banner { display: flex; align-items: center; gap: .5rem; padding: .4rem .75rem; border-radius: .375rem; border-left: 4px solid; font-size: .85rem; }
 .risk-banner i { font-size: 1rem; }
-.risk-banner.rb-breaking { background: rgba(220,53,69,.12); border-color: #dc3545; }
-.risk-banner.rb-high { background: rgba(253,126,20,.12); border-color: #fd7e14; }
-.risk-banner.rb-med { background: rgba(255,193,7,.14); border-color: #ffc107; }
-.risk-banner.rb-low { background: rgba(25,135,84,.12); border-color: #198754; }
-.risk-banner.rb-none { background: rgba(108,117,125,.12); border-color: #6c757d; }
+.risk-banner.rb-breaking { background: color-mix(in srgb, var(--bdf-risk-breaking) 12%, transparent); border-color: var(--bdf-risk-breaking); }
+.risk-banner.rb-high { background: color-mix(in srgb, var(--bdf-risk-high) 12%, transparent); border-color: var(--bdf-risk-high); }
+.risk-banner.rb-med { background: color-mix(in srgb, var(--bdf-risk-medium) 14%, transparent); border-color: var(--bdf-risk-medium); }
+.risk-banner.rb-low { background: color-mix(in srgb, var(--bdf-risk-low) 12%, transparent); border-color: var(--bdf-risk-low); }
+.risk-banner.rb-none { background: color-mix(in srgb, var(--bdf-risk-none) 12%, transparent); border-color: var(--bdf-risk-none); }
 
 /* =====================================================================
  * 扁平无边框按钮主题（去描边 · 简约风格）
@@ -232,7 +278,7 @@ ul.tight li { margin: .2rem 0; }
   --bs-btn-hover-bg: var(--bs-primary-bg-subtle);
   --bs-btn-hover-border-color: transparent;
   --bs-btn-focus-shadow-rgb: 13, 110, 253;
-  --bs-btn-active-color: #fff;
+  --bs-btn-active-color: var(--bdf-on-accent);
   --bs-btn-active-bg: var(--bs-primary);
   --bs-btn-active-border-color: var(--bs-primary);
   --bs-btn-active-shadow: none;
@@ -249,7 +295,7 @@ ul.tight li { margin: .2rem 0; }
   --bs-btn-hover-bg: var(--bs-danger-bg-subtle);
   --bs-btn-hover-border-color: transparent;
   --bs-btn-focus-shadow-rgb: 220, 53, 69;
-  --bs-btn-active-color: #fff;
+  --bs-btn-active-color: var(--bdf-on-accent);
   --bs-btn-active-bg: var(--bs-danger);
   --bs-btn-active-border-color: var(--bs-danger);
   --bs-btn-active-shadow: none;
@@ -258,13 +304,14 @@ ul.tight li { margin: .2rem 0; }
   --bs-btn-disabled-border-color: transparent;
   --bs-btn-gradient: none;
 }
-/* 键盘聚焦保留细主色圆环（无障碍），不使用描边式宽边框 */
+/* 键盘聚焦使用主题 focusRing（TH-02 高对比验收）；shadow 只作辅助，不替代 outline */
 .btn.btn-outline-secondary,
 .btn.btn-outline-primary,
 .btn.btn-outline-danger { box-shadow: none; }
 .btn.btn-outline-secondary:focus-visible,
 .btn.btn-outline-primary:focus-visible,
 .btn.btn-outline-danger:focus-visible {
-  box-shadow: 0 0 0 .25rem color-mix(in srgb, var(--bs-primary) 25%, transparent) !important;
-  outline: none;
+  box-shadow: 0 0 0 .25rem color-mix(in srgb, var(--bdf-focus-ring) 35%, transparent) !important;
+  outline: 2px solid var(--bdf-focus-ring);
+  outline-offset: 2px;
 }

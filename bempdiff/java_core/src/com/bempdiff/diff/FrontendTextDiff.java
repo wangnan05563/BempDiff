@@ -126,6 +126,7 @@ public final class FrontendTextDiff {
             case CSS:  return "css-beautify";
             case HTML: return "html-beautify";
             case JSP:  return "jsp-normalize";
+            case JAVA: return "java-normalize";
             case CONFIG:return "text-normalize";
             default:   return "js-beautify"; // JS 及未知前端文本
         }
@@ -139,6 +140,7 @@ public final class FrontendTextDiff {
             if (fc == FileClass.CSS) return beautifyCss(text);
             if (fc == FileClass.HTML) return beautifyHtml(text);
             if (fc == FileClass.JSP) return beautifyJsp(text);
+            if (fc == FileClass.JAVA) return normalizeNewlines(text); // Java 源码：保留原始排版，仅换行归一
             if (fc == FileClass.CONFIG) return normalizeNewlines(text); // 配置文件：仅换行归一，直接行级 diff 最清晰
             return beautifyJs(text); // JS 默认处理（含未知前端文本）
         } catch (Exception e) {

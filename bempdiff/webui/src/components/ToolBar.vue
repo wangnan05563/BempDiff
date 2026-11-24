@@ -19,12 +19,17 @@ const browseTip = (which) => t('tb.browse', { side: sideLabel(which) })
 
 const props = defineProps({
   onOpenConfig: { type: Function, required: true },
-  onOpenReport: { type: Function, required: true }
+  onOpenReport: { type: Function, required: true },
+  // P3-R11：常驻「?」入口（快捷键速查），解决引导/快捷键只能靠隐藏按钮或帮助文档发现的问题。
+  onOpenHelp: { type: Function, required: false, default: null }
 })
 
 const showExport = ref(false)
 // T02742：导出粒度（全量 all / 仅变化 jar / 仅变化 class），默认全量，供「导出差异资产」打包时透传后端。
 const exportGranularity = ref('all')
+// 普通 jar / 无嵌套 lib 的包可能没有任何 lib/*.jar 变化；此时 JAR 粒度只会产出空 zip，直接禁用并给出原因。
+const jarChanged = computed(() => (state.job && state.job.stats ? Number(state.job.stats.jarChanged || 0) : 0))
+const jarExportDisabled = computed(() => !!state.job && jarChanged.value === 0)
 // 拖拽高亮状态：'old' | 'new' | null
 const dragOver = ref(null)
 
@@ -98,7 +103,14 @@ function onRemoveSession(i) {
 
 // 收敛：工具栏仅保留「生成纯文本/Markdown 报告（不调用 AI）」；AI 报告入口统一在 InfoPanel / ReportPreview
 function onReport() { showExport.value = false; generateReport(false) }
-function onExport() { showExport.value = false; downloadExport(exportGranularity.value) }
+function onExport() {
+  if (exportGranularity.value === 'jar' && jarExportDisabled.value) {
+    toast('warning', t('tb.gJarEmpty'))
+    return
+  }
+  showExport.value = false
+  downloadExport(exportGranularity.value)
+}
 function onExports() { showExport.value = false; openExports() }
 // 大包异步导出进行中记录数：在「下载管理」入口显示轻量角标提醒（不自动弹面板——方案 B，避免遮挡导出下拉）
 const runningExports = computed(() => state.exportRecords.filter(r => r.status === 'running').length)
@@ -205,11 +217,14 @@ function goForward() {
   applySnapshot(histStack.value[histIndex.value])
 }
 
-// 主题切换：整合进工具栏（原在 TopBar 内）。FR-004 三态循环：亮 → 暗 → 跟随系统 → 亮。
+// 主题切换：整合进工具栏（原在 TopBar 内）。TH-02 六态循环：亮 → 暗 → 午夜 → 护眼 → 高对比 → 系统 → 亮。
 const THEME_META = {
-  light:  { icon: 'bi-sun',         labelKey: 'tb.theme.light' },
-  dark:   { icon: 'bi-moon-stars',  labelKey: 'tb.theme.dark' },
-  system: { icon: 'bi-circle-half', labelKey: 'tb.theme.system' },
+  light:    { icon: 'bi-sun',           labelKey: 'tb.theme.light' },
+  dark:     { icon: 'bi-moon-stars',    labelKey: 'tb.theme.dark' },
+  midnight: { icon: 'bi-moon',          labelKey: 'tb.theme.midnight' },
+  paper:    { icon: 'bi-book',          labelKey: 'tb.theme.paper' },
+  contrast: { icon: 'bi-circle-half',   labelKey: 'tb.theme.contrast' },
+  system:   { icon: 'bi-display',       labelKey: 'tb.theme.system' },
 }
 const themeIcon = computed(() => (THEME_META[state.theme] || THEME_META.light).icon)
 const themeTip = computed(() => t((THEME_META[state.theme] || THEME_META.light).labelKey))
@@ -276,7 +291,7 @@ function doCompare() { triggerCompare() }
 </script>
 
 <template>
-  <div class="bg-body-tertiary border-bottom px-2 py-1 d-flex flex-wrap align-items-center gap-2">
+  <div class="legacy-toolbar bg-body-tertiary border-bottom px-2 py-1 d-flex flex-wrap align-items-center gap-2">
     <!-- 输入类型切换：图标 btn-group 分段控件 -->
     <div class="btn-group btn-group-sm" role="group" :aria-label="t('tb.inputType')">
       <button type="button" class="btn" :class="state.leftType === 'package' ? 'btn-primary' : 'btn-outline-secondary'"
@@ -345,7 +360,7 @@ function doCompare() { triggerCompare() }
 
     <!-- 老包/老目录：可拖入文件/目录（桌面壳）；面包屑点击层级即导航到该级目录 -->
     <div class="d-flex align-items-center gap-1 drop-zone" :class="{ 'drop-active': dragOver === 'old' }"
-         style="max-width:320px"
+         style="max-width:clamp(320px, 24vw, 420px)"
          @dragover="onDragOver('old', $event)" @dragenter="onDragOver('old', $event)"
          @dragleave="onDragLeave('old')" @drop="onDrop('old', $event)">
       <span class="tb-label" :title="state.leftType === 'folder' ? t('tb.oldDirTip') : t('tb.oldPkgTip')">{{ state.leftType === 'folder' ? t('tb.side.oldDir') : t('tb.side.old') }}</span>
@@ -355,7 +370,7 @@ function doCompare() { triggerCompare() }
     </div>
     <!-- 新包/新目录：可拖入文件/目录（桌面壳）；面包屑点击层级即导航到该级目录 -->
     <div class="d-flex align-items-center gap-1 drop-zone" :class="{ 'drop-active': dragOver === 'new' }"
-         style="max-width:320px"
+         style="max-width:clamp(320px, 24vw, 420px)"
          @dragover="onDragOver('new', $event)" @dragenter="onDragOver('new', $event)"
          @dragleave="onDragLeave('new')" @drop="onDrop('new', $event)">
       <span class="tb-label" :title="state.leftType === 'folder' ? t('tb.newDirTip') : t('tb.newPkgTip')">{{ state.leftType === 'folder' ? t('tb.side.newDir') : t('tb.side.new') }}</span>
@@ -409,11 +424,12 @@ function doCompare() { triggerCompare() }
             <div class="btn-group btn-group-sm w-100" role="group" aria-label="export granularity">
               <input type="radio" class="btn-check" name="expGran" id="expGranAll" value="all" v-model="exportGranularity">
               <label class="btn btn-outline-secondary" for="expGranAll">{{ t('tb.gAll') }}</label>
-              <input type="radio" class="btn-check" name="expGran" id="expGranJar" value="jar" v-model="exportGranularity">
-              <label class="btn btn-outline-secondary" for="expGranJar">{{ t('tb.gJar') }}</label>
+              <input type="radio" class="btn-check" name="expGran" id="expGranJar" value="jar" v-model="exportGranularity" :disabled="jarExportDisabled">
+              <label class="btn btn-outline-secondary" :class="{ disabled: jarExportDisabled }" for="expGranJar" :title="jarExportDisabled ? t('tb.gJarEmpty') : ''">{{ t('tb.gJar') }}</label>
               <input type="radio" class="btn-check" name="expGran" id="expGranClass" value="class" v-model="exportGranularity">
               <label class="btn btn-outline-secondary" for="expGranClass">{{ t('tb.gClass') }}</label>
             </div>
+            <div v-if="jarExportDisabled" class="small text-secondary mt-1" style="max-width:13.5rem">{{ t('tb.gJarEmpty') }}</div>
           </li>
           <li><a class="dropdown-item" href="#" :class="{ disabled: state.exporting || unpacking }" @click.prevent="!state.exporting && !unpacking && onExport()" :title="t('tb.exportZipTip')">
             <span v-if="state.exporting" class="spinner-border spinner-border-sm align-middle me-1" role="status" aria-hidden="true"></span>
@@ -460,6 +476,9 @@ function doCompare() { triggerCompare() }
               :aria-label="i18n.locale === 'zh-CN' ? t('tb.switchToEn') : t('tb.switchToZh')"
               :title="i18n.locale === 'zh-CN' ? t('tb.switchToEn') : t('tb.switchToZh')"
               style="font-size:.72rem;font-weight:600">{{ i18n.locale === 'zh-CN' ? 'EN' : '中' }}</button>
+      <!-- P3-R11：常驻低干扰「?」入口——快捷键/帮助可发现，不必依赖隐藏引导按钮或帮助文档 tab -->
+      <button v-if="onOpenHelp" class="btn btn-outline-secondary btn-sm" @click="onOpenHelp"
+              :aria-label="t('tb.help')" :title="t('tb.help')"><i class="bi bi-question-lg"></i></button>
       <button class="btn btn-outline-secondary btn-sm" @click="onOpenConfig" :aria-label="t('tb.config')" :title="t('tb.config')"><i class="bi bi-gear"></i></button>
     </div>
     <!-- 下载管理面板：与导出按钮同级位置，集中展示导出记录（含异步大包导出） -->

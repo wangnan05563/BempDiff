@@ -64,13 +64,24 @@ export function renderMarkdown(md) {
   const lines = md.replace(/\r\n/g, '\n').split('\n')
   const html = []
   let i = 0
-  let listStack = [] // 记录未闭合的 <ul> 层级
+  let listStack = [] // [{ level, liOpen }] 未闭合的 <ul> 层级与当前 <li> 状态
 
-  const closeLists = (toLevel = 0) => {
-    while (listStack.length > toLevel) {
+  // 关闭最深层的 <li>（若还开着），再逐层关闭 <ul> 到指定深度。
+  const closeTopLi = () => {
+    const top = listStack[listStack.length - 1]
+    if (top && top.liOpen) { html.push('</li>'); top.liOpen = false }
+  }
+  const closeLists = (toDepth = 0) => {
+    while (listStack.length > toDepth) {
+      closeTopLi()
       html.push('</ul>')
       listStack.pop()
     }
+  }
+
+  const openList = (level) => {
+    html.push('<ul class="md-ul">')
+    listStack.push({ level, liOpen: false })
   }
 
   while (i < lines.length) {
@@ -140,18 +151,18 @@ export function renderMarkdown(md) {
     if (li) {
       const indent = li[1].replace(/\t/g, '  ').length
       const level = Math.floor(indent / 2)
-      // 维护层级
-      if (level > listStack.length) {
-        // 开启新层级
-        html.push('<ul class="md-ul">')
-        listStack.push(level)
+      // 层级维护：level >= 当前深度 → 新开一层 <ul>（父级 <li> 保持未闭合，嵌套列表才真正位于父项内部）；
+      // 否则先关掉更深层，再关闭当前层的上一个 <li>，追加同级项。
+      if (level >= listStack.length) {
+        openList(level)
       } else {
-        closeLists(level)
-        if (listStack.length < level) {
-          html.push('<ul class="md-ul">'); listStack.push(level)
-        }
+        closeLists(level + 1)
+        closeTopLi()
       }
-      html.push(`<li>${inline(escapeHtml(li[2]))}</li>`)
+      // 裸 <li> 修复：首个列表项（listStack 为空）也会先开 <ul>，不再出现无容器 <li>。
+      if (!listStack.length) openList(level)
+      html.push(`<li>${inline(escapeHtml(li[2]))}`)
+      listStack[listStack.length - 1].liOpen = true
       i++; continue
     }
 

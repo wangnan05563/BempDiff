@@ -104,7 +104,8 @@ public final class ProjectContextServiceTest {
             var view = ProjectContextService.renderContextView(idx);
             Asserts.assertNotNull("上下文视图应可渲染", view);
             Asserts.assertEquals("视图构建系统应标注多项目", "多项目仓库（2 个项目）", view.getBuildSystem());
-            Asserts.assertContains("视图简述应含项目路径", view.getSummary(), "a");
+            Asserts.assertContains("视图简述应说明项目数量", view.getSummary(), "2 个项目");
+            Asserts.assertNotContains("视图简述不应展开项目清单或带出绝对路径", view.getSummary(), projDir);
         } finally {
             ProjectContextCache.clear(projDir);
         }

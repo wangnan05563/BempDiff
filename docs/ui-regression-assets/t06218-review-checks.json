@@ -1,0 +1,122 @@
+{
+  "job": "job-3201",
+  "ready": true,
+  "overflow": {
+    "innerWidth": 1280,
+    "dpr": 1,
+    "doc": {
+      "client": 1280,
+      "scroll": 1280
+    },
+    "body": {
+      "client": 1280,
+      "scroll": 1280
+    },
+    "app": {
+      "client": 1280,
+      "scroll": 1280,
+      "overflowX": "visible",
+      "display": "flex",
+      "wrap": "nowrap"
+    },
+    "filebar": {
+      "client": 628,
+      "scroll": 628,
+      "overflowX": "visible",
+      "display": "flex",
+      "wrap": "wrap"
+    },
+    "actions": {
+      "client": 604,
+      "scroll": 604,
+      "overflowX": "visible",
+      "display": "flex",
+      "wrap": "wrap"
+    },
+    "tree": {
+      "client": 299,
+      "scroll": 299,
+      "overflowX": "auto",
+      "display": "block",
+      "wrap": "nowrap"
+    },
+    "diff": {
+      "client": 628,
+      "scroll": 628,
+      "overflowX": "hidden",
+      "display": "flex",
+      "wrap": "nowrap"
+    }
+  },
+  "noHScroll": true,
+  "before": {
+    "status": " 审阅 0/1 · 0% Hunk 0/2",
+    "badge": " 未审",
+    "progress": "已审 0/2 Hunk",
+    "treeIcons": 0,
+    "hunkButtons": 4
+  },
+  "after100": {
+    "at30": {
+      "ms": 53.4,
+      "status": " 审阅 0/1 · 0% Hunk 1/2",
+      "badge": " 审阅中",
+      "badgeClass": "badge review-badge text-bg-warning",
+      "progress": "已审 1/2 Hunk",
+      "treeIcons": 1,
+      "reviewedRows": 2
+    },
+    "at100": {
+      "ms": 134.5,
+      "status": " 审阅 0/1 · 0% Hunk 1/2",
+      "badge": " 审阅中",
+      "badgeClass": "badge review-badge text-bg-warning",
+      "progress": "已审 1/2 Hunk",
+      "treeIcons": 1,
+      "reviewedRows": 2
+    }
+  },
+  "manual": {
+    "ms": 31.9,
+    "badge": " 已审 · 手动标记",
+    "badgeClass": "badge review-badge text-bg-success",
+    "status": " 审阅 1/1 · 100% Hunk 1/2"
+  },
+  "apiAfterHunk": {
+    "exists": true,
+    "status": "in_progress",
+    "hunks": {
+      "0": "reviewed"
+    },
+    "summary": {
+      "totalFiles": 1,
+      "reviewedFiles": 0,
+      "inProgressFiles": 1,
+      "unreviewedFiles": 0,
+      "needsReviewFiles": 0,
+      "manualFiles": 0,
+      "totalHunks": 2,
+      "reviewedHunks": 1,
+      "needsReviewHunks": 0,
+      "filePercent": 0,
+      "hunkPercent": 50
+    }
+  },
+  "apiManual": {
+    "status": "reviewed",
+    "manualOverride": true,
+    "summary": {
+      "totalFiles": 1,
+      "reviewedFiles": 1,
+      "inProgressFiles": 0,
+      "unreviewedFiles": 0,
+      "needsReviewFiles": 0,
+      "manualFiles": 1,
+      "totalHunks": 2,
+      "reviewedHunks": 1,
+      "needsReviewHunks": 0,
+      "filePercent": 100,
+      "hunkPercent": 50
+    }
+  }
+}

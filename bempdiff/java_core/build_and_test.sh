@@ -76,6 +76,7 @@ echo "==> 运行 TestRunner"
   com.bempdiff.test.UnpackTest \
   com.bempdiff.test.UpdateCheckServiceContractTest \
   com.bempdiff.test.ServerApiHttpTest \
+  com.bempdiff.test.ReviewStoreTest \
   com.bempdiff.test.ServerCompareFlowTest \
   com.bempdiff.test.ServerStaticAndConfigTest \
   com.bempdiff.test.MainCliTest \
@@ -86,6 +87,8 @@ echo "==> 运行 TestRunner"
   com.bempdiff.test.MarkdownReportBranchTest \
   com.bempdiff.test.JobStateTest \
   com.bempdiff.test.CompareInputValidationTest \
+  com.bempdiff.test.PreflightServiceTest \
+  com.bempdiff.test.DecompileGuardTest \
   com.bempdiff.test.CompareOptionsRequestTest \
   com.bempdiff.test.UpdateCheckStubTest \
   com.bempdiff.test.NestedUnpackerBranchTest \

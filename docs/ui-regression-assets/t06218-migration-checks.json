@@ -1,0 +1,40 @@
+{
+  "job": "job-3201",
+  "legacyBefore": "{\"job-3201\":{\"src/Foo.java\":[5,10]}}",
+  "legacyRaw": null,
+  "cacheExists": true,
+  "badge": " 审阅中",
+  "progress": "已审 1/2 Hunk",
+  "reviewedRows": 4,
+  "treeIcons": 1,
+  "toast": "已将旧版行级审阅标记迁移到文件级审阅记录|已将旧版行级审阅标记迁移到文件级审阅记录|已将旧版行级审阅标记迁移到文件级审阅记录",
+  "api": {
+    "exists": true,
+    "file": {
+      "hunkTotal": 2,
+      "hunks": {
+        "0": "reviewed"
+      },
+      "lines": [
+        5,
+        10
+      ],
+      "manualOverride": false,
+      "status": "in_progress",
+      "migratedFrom": "localStorage"
+    },
+    "summary": {
+      "totalFiles": 1,
+      "reviewedFiles": 0,
+      "inProgressFiles": 1,
+      "unreviewedFiles": 0,
+      "needsReviewFiles": 0,
+      "manualFiles": 0,
+      "totalHunks": 2,
+      "reviewedHunks": 1,
+      "needsReviewHunks": 0,
+      "filePercent": 0,
+      "hunkPercent": 50
+    }
+  }
+}

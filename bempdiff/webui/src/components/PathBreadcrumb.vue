@@ -3,10 +3,10 @@
 // 本组件点击层级做「路径导航」：把 v-model 更新为该层级的前缀路径，并高亮该层级）：
 //  - 默认（未点击）状态：面包屑导航，按 / 与 \ 拆出各级目录/文件名；
 //    点击第 i 级 → 路径即时更新为「从根到该级」的前缀（如 D:/a/b/c 点 b → D:/a/b），该级高亮；
-//  - 点击空白处：切换为完整路径编辑框（纯文本，可查看/编辑/全选复制），Enter 确认、Esc/失焦恢复面包屑；
+//  - 点击空白处：切换为完整路径编辑框（纯文本，可查看/编辑/全选复制），Enter 或失焦确认、Esc 取消；
 //  - 复制按钮：一键复制完整路径到剪贴板；
 //  - 兼容 Windows 盘符（D: → D:/）与相对路径；disabled（AI 分析中）时全组件禁用。
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { toast } from '../store'
 import { t } from '../lib/i18n'
 
@@ -28,6 +28,24 @@ const segments = computed(() => {
 })
 
 const firstIsDrive = computed(() => /^[a-zA-Z]:$/.test(segments.value[0] || ''))
+
+// 路径尾段优先可见：面包屑在固定宽度内横向滚动，默认滚到最右端，
+// 保证用户第一眼看到文件名（而不是只看到 /home/user/... 前缀）；仍可左滚查看完整层级。
+const crumbsRef = ref(null)
+function scrollToTail() {
+  nextTick(() => {
+    const el = crumbsRef.value
+    if (el) el.scrollLeft = el.scrollWidth
+  })
+}
+// 面包屑使用 Transition（in/out 淡入淡出），路径更新后 DOM 可能比 watcher 晚一帧挂载；
+// 追加一次短延迟兜底，确保首次渲染/编辑提交后都能滚到路径尾段（文件名）。
+function scheduleTailScroll() {
+  scrollToTail()
+  setTimeout(scrollToTail, 250)
+}
+watch(() => props.modelValue, scheduleTailScroll, { immediate: true, flush: 'post' })
+watch(() => segments.value.length, scheduleTailScroll, { flush: 'post' })
 
 /** 点击第 i 级 → 前缀路径（盘符根规范化：D: → D:/）。 */
 function prefixOf(i) {
@@ -63,17 +81,28 @@ function exitEdit() { editing.value = false }
 // 点击面包屑空白（非层级节点/非复制按钮）→ 进入编辑
 function onBarClick(e) {
   if (editing.value || props.disabled) return
-  if (e.target && e.target.closest && e.target.closest('.pb-seg, .pb-copy')) return
+  if (e.target && e.target.closest && e.target.closest('.pb-seg, .pb-copy, .pb-edit')) return
   enterEdit()
 }
 function commitEdit() {
+  if (!editing.value) return
   const v = editText.value.trim()
   exitEdit()
   if (v !== props.modelValue) emit('update:modelValue', v)
 }
+// Esc 是显式取消：先置抑制位，避免失焦事件把「已取消」的输入又提交出去。
+let suppressBlurCommit = false
 function onEditKey(e) {
   if (e.key === 'Enter') commitEdit()
-  else if (e.key === 'Escape') exitEdit()
+  else if (e.key === 'Escape') {
+    suppressBlurCommit = true
+    exitEdit()
+    nextTick(() => { suppressBlurCommit = false })
+  }
+}
+function onEditBlur() {
+  if (suppressBlurCommit) return
+  commitEdit()
 }
 
 // ---------- 复制完整路径（clipboard API，降级 execCommand） ----------
@@ -109,8 +138,8 @@ async function copyPath() {
       <input v-if="editing" ref="inputRef" v-model="editText" class="pb-input"
              :title="modelValue" spellcheck="false" autocomplete="off"
              :disabled="disabled"
-             @keydown="onEditKey" @blur="exitEdit" @click.stop />
-      <div v-else class="pb-crumbs">
+             @keydown="onEditKey" @blur="onEditBlur" @click.stop />
+      <div v-else class="pb-crumbs" ref="crumbsRef">
         <template v-for="(seg, i) in segments" :key="i">
           <i v-if="i > 0" class="bi bi-chevron-right pb-sep"></i>
           <button type="button" class="pb-seg"
@@ -125,12 +154,17 @@ async function copyPath() {
           </button>
         </template>
         <span v-if="!segments.length" class="pb-empty">{{ label ? t('pbc.unsetLabel', { label }) : t('pbc.unset') }}</span>
-        <button v-if="modelValue" type="button" class="pb-copy" :disabled="disabled"
-                :aria-label="t('pbc.copy')" :title="t('pbc.copy')" @click.stop="copyPath">
-          <i class="bi bi-clipboard"></i>
-        </button>
       </div>
     </Transition>
+    <!-- 显式编辑入口：短路径时面包屑铺满整条，没有“空白处”可点，用户无法发现编辑态 -->
+    <button v-if="modelValue && !editing" type="button" class="pb-edit" :disabled="disabled"
+            :aria-label="t('pbc.edit')" :title="t('pbc.edit')" @click.stop="enterEdit">
+      <i class="bi bi-pencil"></i>
+    </button>
+    <button v-if="modelValue && !editing" type="button" class="pb-copy" :disabled="disabled"
+            :aria-label="t('pbc.copy')" :title="t('pbc.copy')" @click.stop="copyPath">
+      <i class="bi bi-clipboard"></i>
+    </button>
   </div>
 </template>
 
@@ -159,7 +193,8 @@ async function copyPath() {
   align-items: center;
   overflow-x: auto;
   scrollbar-width: thin;
-  max-width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 /* 层级节点 */
 .pb-seg {
@@ -191,8 +226,8 @@ async function copyPath() {
 /* 层级分隔符 */
 .pb-sep { font-size: .5rem; color: var(--bs-secondary-color); opacity: .75; flex: 0 0 auto; }
 .pb-empty { font-size: .76rem; color: var(--bs-secondary-color); padding: 0 .3rem; white-space: nowrap; }
-/* 复制按钮：hover 显示主色 */
-.pb-copy {
+/* 编辑/复制按钮：hover 显示主色 */
+.pb-edit, .pb-copy {
   border: none;
   background: transparent;
   color: var(--bs-secondary-color);
@@ -201,9 +236,10 @@ async function copyPath() {
   border-radius: 3px;
   flex: 0 0 auto;
   cursor: pointer;
-  margin-left: auto;
 }
-.pb-copy:hover { color: var(--bs-primary); background: rgba(var(--bs-primary-rgb), .12); }
+.pb-edit { margin-left: auto; }
+.pb-copy { margin-left: .1rem; }
+.pb-edit:hover, .pb-copy:hover { color: var(--bs-primary); background: rgba(var(--bs-primary-rgb), .12); }
 
 /* 编辑模式：透明无边框输入框，等宽字体显示完整路径 */
 .pb-input {

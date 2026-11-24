@@ -67,14 +67,14 @@ public class FolderTest {
     public void testParse_classifyAndSha() throws IOException {
         Path d = mkDir();
         write(d, "X.class", "compiled-bytes");   // 编译产物 → CLASS
-        write(d, "Src.java", "public class Src {}"); // 源码 → OTHER（classify 仅对 .class 判 CLASS）
+        write(d, "Src.java", "public class Src {}"); // 源码 → JAVA（纳入文本 diff 与报告）
         write(d, "Y.js", "var a=1;");
         write(d, "Z.jar", "fakejar");
         write(d, "W.txt", "plain");
         PackageSnapshot snap = parser.parse(d, cfg);
         Map<String, LogicalEntry> e = snap.getEntries();
         Asserts.assertEquals("class 应为 CLASS", FileClass.CLASS, e.get("X.class").getFileClass());
-        Asserts.assertEquals("java 源码应为 OTHER", FileClass.OTHER, e.get("Src.java").getFileClass());
+        Asserts.assertEquals("java 源码应为 JAVA", FileClass.JAVA, e.get("Src.java").getFileClass());
         Asserts.assertEquals("js 应为 JS", FileClass.JS, e.get("Y.js").getFileClass());
         Asserts.assertEquals("jar 应为 JAR", FileClass.JAR, e.get("Z.jar").getFileClass());
         Asserts.assertEquals("txt 应归 CONFIG(文本配置,纳入内容 diff)", FileClass.CONFIG, e.get("W.txt").getFileClass());

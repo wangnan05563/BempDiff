@@ -25,6 +25,19 @@ const showGuide = ref(false)     // 「手动手工更新指引」折叠面板�
 const updating = ref(false)      // 一键下载更新进行中（true 时按钮转圈并禁用）
 const updateMsg = ref('')        // 一键更新结果提示
 const updateMsgOk = ref(null)    // 结果语义位（true=成功/false=失败），替代 startsWith 语言耦合判断
+const showErrDetail = ref(false) // P2-7：更新检查失败时展开原始技术错误（含 HTTP 状态/GitHub message）
+
+// P2-7：复制原始错误详情，便于用户粘贴到工单/群里排查（剪贴板不可用时提示手动选择）。
+async function copyErrDetail() {
+  const text = String((result.value && result.value.lastError) || '')
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    toast('success', t('ab.errCopied'))
+  } catch (_) {
+    toast('warning', t('ab.errCopyFail'))
+  }
+}
 
 // 一键更新是否可用：桌面壳（Electron）具备 downloadInstall 能力时才显示/启用。
 const canOneClick = () => !!(typeof window !== 'undefined' && window.bempdiff &&
@@ -119,7 +132,9 @@ async function doCheck() {
   try {
     const r = await api.checkUpdate({ current: currentVersion })
     result.value = r
-    toast('info', (r && r.message) || t('ab.checkDone'))
+    // P2-7：失败详情已在页面内可展开/复制，toast 只做轻提示，避免长异常文本被 toast 裁剪。
+    if (r && r.ok === false) toast('warning', t('ab.checkFailToast'))
+    else toast('info', (r && r.message) || t('ab.checkDone'))
   } catch (e) {
     // 网络层/后端 500 兜底：展示通用失败，不抛出打断交互
     result.value = { ok: false, message: t('ab.checkFail', { msg: (e && e.message) || String(e) }) }
@@ -159,7 +174,19 @@ onMounted(() => { seedToken(); doCheck() })
       <template v-if="result">
         <!-- 失败 -->
         <div v-if="result.ok === false" class="alert alert-danger py-2 mt-2 mb-0 about-result" role="alert">
-          <i class="bi bi-exclamation-triangle-fill me-1"></i>{{ result.message }}
+          <div><i class="bi bi-exclamation-triangle-fill me-1"></i>{{ result.message }}</div>
+          <!-- P2-7：面向用户的 message 与原始异常分开；原始详情默认折叠，可展开/复制。 -->
+          <div v-if="result.lastError" class="mt-1">
+            <button type="button" class="btn btn-link btn-sm p-0 about-err-toggle"
+                    @click="showErrDetail = !showErrDetail">
+              <i class="bi" :class="showErrDetail ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+              {{ showErrDetail ? t('ab.errHide') : t('ab.errShow') }}
+            </button>
+            <button type="button" class="btn btn-link btn-sm p-0 ms-2 about-err-toggle" @click="copyErrDetail">
+              <i class="bi bi-clipboard"></i> {{ t('ab.errCopy') }}
+            </button>
+            <pre v-if="showErrDetail" class="about-err-pre mt-1 mb-0">{{ result.lastError }}</pre>
+          </div>
         </div>
         <!-- 成功但仓库无 Release -->
         <div v-else-if="!result.latest" class="alert alert-secondary py-2 mt-2 mb-0 about-result" role="alert">
@@ -289,6 +316,9 @@ onMounted(() => { seedToken(); doCheck() })
 /* 版本徽标统一宽度，让对比行对齐 */
 .about-ver { white-space: nowrap; }
 .about-result { font-size: .78rem; }
+.about-err-toggle { font-size: .74rem; vertical-align: baseline; }
+.about-err-pre { font-size: .72rem; white-space: pre-wrap; word-break: break-all; max-height: 9rem; overflow: auto;
+  background: var(--bs-tertiary-bg); border-radius: 4px; padding: .4rem .5rem; }
 .about-compare { gap: .5rem; }
 .about-body pre { font-family: inherit; }
 .about-guide { padding-left: 1.1rem; }

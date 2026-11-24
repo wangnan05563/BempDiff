@@ -1,0 +1,187 @@
+{
+  "generatedAt": "2026-11-23T08:42:45.008Z",
+  "job": "job-431001",
+  "base": "http://127.0.0.1:4180/",
+  "acceptance": [
+    "AC-10",
+    "AC-11",
+    "AC-07"
+  ],
+  "checks": [
+    {
+      "name": "初始审阅头为 1/3",
+      "ok": true,
+      "detail": "已审 1/3 33%"
+    },
+    {
+      "name": "初始状态栏为审阅 1/3",
+      "ok": true,
+      "detail": "审阅 1/3 · 33% Hunk 0/3"
+    },
+    {
+      "name": "初始 Hunk 为 0/3",
+      "ok": true,
+      "detail": "审阅 1/3 · 33% Hunk 0/3"
+    },
+    {
+      "name": "AC-10 Hunk 按钮存在",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "AC-10 100ms 内状态栏已同步",
+      "ok": true,
+      "detail": "审阅 1/3 · 33% Hunk 1/3"
+    },
+    {
+      "name": "AC-10 100ms 内文件徽标已变审阅中",
+      "ok": true,
+      "detail": "审阅中"
+    },
+    {
+      "name": "AC-10 100ms 内文件栏 Hunk 进度已同步",
+      "ok": true,
+      "detail": "已审 1/2 Hunk"
+    },
+    {
+      "name": "AC-10 100ms 内树节点图标已出现",
+      "ok": true,
+      "detail": "bi review-tree-ic bi-circle-half|审阅中"
+    },
+    {
+      "name": "AC-10 首次 DOM 更新 <100ms",
+      "ok": true,
+      "detail": "64.89999999850988"
+    },
+    {
+      "name": "AC-10 服务端文件状态 in_progress",
+      "ok": true,
+      "detail": "{\"hunkTotal\":2,\"manualOverride\":false,\"lines\":[5],\"status\":\"in_progress\",\"hunks\":{\"0\":\"reviewed\"},\"notes\":[],\"bookmarks\":[]}"
+    },
+    {
+      "name": "AC-10 服务端 Hunk 0 已审",
+      "ok": true,
+      "detail": "{\"0\":\"reviewed\"}"
+    },
+    {
+      "name": "AC-10 服务端摘要 reviewedHunks=1/3",
+      "ok": true,
+      "detail": "{\"totalFiles\":3,\"reviewedFiles\":1,\"inProgressFiles\":1,\"unreviewedFiles\":1,\"needsReviewFiles\":0,\"manualFiles\":1,\"totalHunks\":3,\"reviewedHunks\":1,\"needsReviewHunks\":0,\"filePercent\":33,\"hunkPercent\":33}"
+    },
+    {
+      "name": "AC-11 手动覆盖后徽标显示已审",
+      "ok": true,
+      "detail": "已审 · 手动标记"
+    },
+    {
+      "name": "AC-11 手动覆盖后显示手动标记",
+      "ok": true,
+      "detail": "已审 · 手动标记"
+    },
+    {
+      "name": "AC-11 手动覆盖后 Hunk 仍为 1/2",
+      "ok": true,
+      "detail": "已审 1/2 Hunk"
+    },
+    {
+      "name": "AC-11 树头已审数变为 2/3",
+      "ok": true,
+      "detail": "已审 2/3 67%"
+    },
+    {
+      "name": "AC-11 服务端状态 reviewed",
+      "ok": true,
+      "detail": "{\"hunkTotal\":2,\"manualOverride\":true,\"lines\":[5],\"status\":\"reviewed\",\"hunks\":{\"0\":\"reviewed\"},\"notes\":[],\"bookmarks\":[]}"
+    },
+    {
+      "name": "AC-11 服务端 manualOverride=true",
+      "ok": true,
+      "detail": "{\"hunkTotal\":2,\"manualOverride\":true,\"lines\":[5],\"status\":\"reviewed\",\"hunks\":{\"0\":\"reviewed\"},\"notes\":[],\"bookmarks\":[]}"
+    },
+    {
+      "name": "AC-11 服务端 manualFiles=2",
+      "ok": true,
+      "detail": "{\"totalFiles\":3,\"reviewedFiles\":2,\"inProgressFiles\":0,\"unreviewedFiles\":1,\"needsReviewFiles\":0,\"manualFiles\":2,\"totalHunks\":3,\"reviewedHunks\":1,\"needsReviewHunks\":0,\"filePercent\":67,\"hunkPercent\":33}"
+    },
+    {
+      "name": "AC-11 服务端 filePercent=67",
+      "ok": true,
+      "detail": "{\"totalFiles\":3,\"reviewedFiles\":2,\"inProgressFiles\":0,\"unreviewedFiles\":1,\"needsReviewFiles\":0,\"manualFiles\":2,\"totalHunks\":3,\"reviewedHunks\":1,\"needsReviewHunks\":0,\"filePercent\":67,\"hunkPercent\":33}"
+    },
+    {
+      "name": "reload 后手动已审保留",
+      "ok": true,
+      "detail": "已审 · 手动标记"
+    },
+    {
+      "name": "reload 后 Hunk 进度保留",
+      "ok": true,
+      "detail": "已审 1/2 Hunk"
+    },
+    {
+      "name": "reload 后树头仍为 2/3",
+      "ok": true,
+      "detail": "已审 2/3 67%"
+    },
+    {
+      "name": "reload 后状态栏审阅 2/3",
+      "ok": true,
+      "detail": "审阅 2/3 · 67% Hunk 1/3"
+    },
+    {
+      "name": "AC-07 AI 分类夹具已注入",
+      "ok": true,
+      "detail": "paused=1"
+    },
+    {
+      "name": "AC-07 高风险计数为 2/3",
+      "ok": true,
+      "detail": "已审 2/3 67% 高风险 2/3 备注 0 书签 0"
+    },
+    {
+      "name": "AC-07 高风险 chip 可点击",
+      "ok": true,
+      "detail": "[{\"text\":\"全部 3\",\"active\":true,\"disabled\":false},{\"text\":\"未审 1\",\"active\":false,\"disabled\":false},{\"text\":\"进行中 0\",\"active\":false,\"disabled\":false},{\"text\":\"需复核 0\",\"active\":false,\"disabled\":false},{\"text\":\"已审 2\",\"active\":false,\"disabled\":false},{\"text\":\"高风险 2\",\"active\":false,\"disabled\":false},{\"text\":\"仅格式变化 0\",\"active\":false,\"disabled\":false},{\"text\":\"只看书签 0\",\"active\":false,\"disabled\":true},{\"text\":\"清除过滤条件\",\"active\":false,\"disabled\":false}]"
+    },
+    {
+      "name": "AC-07 全部筛选 chip 可恢复",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "AC-07 未审 chip 可点击",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "AC-07 未审 + 高风险仅保留 README.md",
+      "ok": true,
+      "detail": "[\"README.md\"]"
+    },
+    {
+      "name": "AC-07 已审高风险 Foo 被排除",
+      "ok": true,
+      "detail": "[\"README.md\"]"
+    },
+    {
+      "name": "AC-07 未审 chip 激活",
+      "ok": true,
+      "detail": "[{\"text\":\"全部 3\",\"active\":false,\"disabled\":false},{\"text\":\"未审 1\",\"active\":true,\"disabled\":false},{\"text\":\"进行中 0\",\"active\":false,\"disabled\":false},{\"text\":\"需复核 0\",\"active\":false,\"disabled\":false},{\"text\":\"已审 2\",\"active\":false,\"disabled\":false},{\"text\":\"高风险 2\",\"active\":true,\"disabled\":false},{\"text\":\"仅格式变化 0\",\"active\":false,\"disabled\":false},{\"text\":\"只看书签 0\",\"active\":false,\"disabled\":true},{\"text\":\"清除过滤条件\",\"active\":false,\"disabled\":false}]"
+    },
+    {
+      "name": "AC-07 高风险 chip 激活",
+      "ok": true,
+      "detail": "[{\"text\":\"全部 3\",\"active\":false,\"disabled\":false},{\"text\":\"未审 1\",\"active\":true,\"disabled\":false},{\"text\":\"进行中 0\",\"active\":false,\"disabled\":false},{\"text\":\"需复核 0\",\"active\":false,\"disabled\":false},{\"text\":\"已审 2\",\"active\":false,\"disabled\":false},{\"text\":\"高风险 2\",\"active\":true,\"disabled\":false},{\"text\":\"仅格式变化 0\",\"active\":false,\"disabled\":false},{\"text\":\"只看书签 0\",\"active\":false,\"disabled\":true},{\"text\":\"清除过滤条件\",\"active\":false,\"disabled\":false}]"
+    },
+    {
+      "name": "运行期无异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "runtimeErrors": [],
+  "summary": {
+    "pass": 34,
+    "fail": 0
+  }
+}

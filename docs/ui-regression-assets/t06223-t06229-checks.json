@@ -1,0 +1,442 @@
+{
+  "generatedAt": "2026-11-23T13:09:36.757Z",
+  "base": "http://127.0.0.1:4180/",
+  "packageJob": "job-327002",
+  "folderJob": "job-327001",
+  "total": 86,
+  "passed": 86,
+  "failed": 0,
+  "runtimeErrors": [],
+  "checks": [
+    {
+      "name": "Launchpad 默认首屏可见",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Launchpad 骨架：最近/收藏/模板/三步引导",
+      "ok": true,
+      "detail": "{\"recent\":true,\"panels\":3,\"guides\":3}"
+    },
+    {
+      "name": "最近项 10 条上限内展示 3 条",
+      "ok": true,
+      "detail": "3 seeded"
+    },
+    {
+      "name": "最近项展示真实高风险数",
+      "ok": true,
+      "detail": "高风险 4 · 不兼容 30"
+    },
+    {
+      "name": "最近项展示审阅进度 0/21",
+      "ok": true,
+      "detail": "WAR/JAR\n文件 21\n高风险 4 · 不兼容 30\n已审 0/21\n#job-327002"
+    },
+    {
+      "name": "模板 3 个（WAR/目录/配置）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "最近项均为可键盘操作的 button",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "最近项有读屏可读标题",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "启动显示开关默认勾选",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Launchpad 1280 无横向滚动",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "失效路径显示重新定位按钮",
+      "ok": true,
+      "detail": " 路径失效\n重新定位"
+    },
+    {
+      "name": "失效路径不离开 Launchpad、不崩溃",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "点击最近项进入 Workspace（1 次点击）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Workspace 出现 Compare Bar",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Workspace 出现 Insight 面板",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "总览首屏渲染 ≤1s（AC-13）",
+      "ok": true,
+      "detail": "356ms"
+    },
+    {
+      "name": "总览展示 Top 风险行",
+      "ok": true,
+      "detail": "5"
+    },
+    {
+      "name": "Top 风险跳转选中文件（AC-14）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "右栏五个 Insight 页签",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "1280 Workspace 无横向滚动",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Compare Bar 单行高度 ≤64px",
+      "ok": true,
+      "detail": "41.6px"
+    },
+    {
+      "name": "全局层保留 6 类入口（类型/路径/比对/搜索/更多）",
+      "ok": true,
+      "detail": "5"
+    },
+    {
+      "name": "更多菜单可打开",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "更多菜单分组：输出/AI/视图/会话",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "更多菜单含返回工作台入口",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "更多菜单不含未实现的命令面板入口",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "一键返回 Launchpad（AC7）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "更多菜单 1280 无横向滚动",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Launchpad 仍保留 3 条最近项",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "打开包比对 job",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "总览 KPI 含变更文件/不兼容 API/高风险影响/审阅进度",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "总览有 Top 风险与建议回归区",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "总览有变更类型/文件类型分布",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "兼容页签打开",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "兼容列表有行",
+      "ok": true,
+      "detail": "75"
+    },
+    {
+      "name": "兼容列表展示证据/置信度",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "兼容搜索按类/成员过滤",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "兼容“不兼容”筛选只保留 REMOVED/SIGNATURE",
+      "ok": true,
+      "detail": "移除 API|移除 API|移除 API"
+    },
+    {
+      "name": "页签选中状态持久化",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "兼容筛选持久化",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "影响页签打开",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "影响列表有卡片",
+      "ok": true,
+      "detail": "22"
+    },
+    {
+      "name": "影响搜索过滤调用方/类名",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "影响“高”筛选只保留高/严重",
+      "ok": true,
+      "detail": "高|高|高"
+    },
+    {
+      "name": "证据页签打开",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "证据页展示审阅/备注/书签/AST",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "AI 页签复用 AiConsole 且不报错",
+      "ok": true,
+      "detail": "runtimeErrors=0"
+    },
+    {
+      "name": "Insights schemaVersion=1.0",
+      "ok": true,
+      "detail": "1.0"
+    },
+    {
+      "name": "apiCompat.summary.breaking 与顶栏 summary 一致",
+      "ok": true,
+      "detail": "30/30"
+    },
+    {
+      "name": "apiCompat 条目字段完整（level/class/member/signature/change/evidence/fileKey）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "apiCompat 分页 total/truncated 标注",
+      "ok": true,
+      "detail": "total=75"
+    },
+    {
+      "name": "impact 条目含 changedClass/callers/confidence/evidence/fileKey",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "astSummary/reviewSummary 字段齐全",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "响应体 ≤5MB（1000 文件上限口径）",
+      "ok": true,
+      "detail": "47852B"
+    },
+    {
+      "name": "配置测试前返回 Launchpad",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "配置测试打开目录 job",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "选择 config/app.yaml",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "显示语义切换按钮 config/app.yaml",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "语义 Diff 渲染 config/app.yaml",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "config/app.yaml 有键级变更行",
+      "ok": true,
+      "detail": "6"
+    },
+    {
+      "name": "config/app.yaml 320px 右栏无表格溢出",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "选择 config/app.properties",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "显示语义切换按钮 config/app.properties",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "语义 Diff 渲染 config/app.properties",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "config/app.properties 有键级变更行",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "config/app.properties 320px 右栏无表格溢出",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "选择 config/app.xml",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "显示语义切换按钮 config/app.xml",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "语义 Diff 渲染 config/app.xml",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "config/app.xml 有键级变更行",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "config/app.xml 320px 右栏无表格溢出",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "选择 config/app.json",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "显示语义切换按钮 config/app.json",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "语义 Diff 渲染 config/app.json",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "config/app.json 有键级变更行",
+      "ok": true,
+      "detail": "4"
+    },
+    {
+      "name": "config/app.json 320px 右栏无表格溢出",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "YAML 密钥默认脱敏（不含 new-secret/old-secret）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "YAML 展示分组与搜索工具",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "配置搜索 server.port 过滤到 1 行",
+      "ok": true,
+      "detail": "1"
+    },
+    {
+      "name": "勾选后可临时显示密钥明文（本地）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "切换回原始行 Diff",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "空态出现示例包入口",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "示例包一键进入 Workspace",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "示例包生成了可预览报告",
+      "ok": true,
+      "detail": "true"
+    },
+    {
+      "name": "报告预览弹层可见",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "整轮 M3 E2E 运行期异常为 0",
+      "ok": true,
+      "detail": ""
+    }
+  ]
+}

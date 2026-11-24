@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { state, isRunning, phaseLabel, cancelExport } from '../store'
+import { state, isRunning, phaseLabel, cancelExport, setReviewCockpit } from '../store'
 import { t } from '../lib/i18n'
 
 function basename(p) {
@@ -55,7 +55,22 @@ const versions = computed(() => {
       {{ t('info.modified') }} <b class="text-body">{{ s.modified }}</b> · {{ t('info.unchanged') }} <b class="text-body">{{ s.unchanged }}</b>
     </span>
     <span v-if="fullStats" :title="t('sb.bizTip')">{{ t('info.bizChanged') }} <b class="text-body">{{ fullStats.bizChanged }}</b> · {{ t('info.jarChanged') }} <b class="text-body">{{ fullStats.jarChanged }}</b></span>
+    <!-- T06218 审阅进度：由 state.reviewSummary 即时驱动，标记后同帧更新（AC-10） -->
+    <span v-if="state.job && state.reviewSummary && state.reviewSummary.totalFiles" class="review-summary"
+          :title="t('sb.reviewTip', { files: state.reviewSummary.totalFiles, hunks: state.reviewSummary.totalHunks })">
+      <i class="bi bi-check2-square"></i> {{ t('sb.review') }}
+      <b class="text-body">{{ state.reviewSummary.reviewedFiles }}/{{ state.reviewSummary.totalFiles }}</b>
+      · {{ state.reviewSummary.filePercent }}%
+      <span class="text-secondary ms-1">{{ t('sb.hunk', { done: state.reviewSummary.reviewedHunks, total: state.reviewSummary.totalHunks }) }}</span>
+      <span v-if="state.reviewSummary.needsReviewFiles" class="text-danger ms-1">{{ t('sb.needsReview', { n: state.reviewSummary.needsReviewFiles }) }}</span>
+    </span>
     <span :title="state.error ? t('sb.verFailedTip') : t('sb.verTip')">{{ t('status.version') }}：<b class="text-body">{{ versions }}</b></span>
+    <!-- T06219 feature flag：布局切换常驻状态栏，确保旧布局/新版布局都能随时回退，且不丢数据（AC-05） -->
+    <button type="button" class="btn btn-link btn-sm p-0 align-baseline sb-layout-toggle"
+            :title="t('sb.layoutTip')" :aria-label="t('sb.layoutTip')"
+            @click="setReviewCockpit(!state.reviewCockpit)">
+      <i class="bi bi-layout-sidebar"></i> {{ state.reviewCockpit ? t('sb.layoutNew') : t('sb.layoutLegacy') }}
+    </button>
     <span v-if="state.analyzing" class="text-primary"><i class="bi bi-cpu"></i> {{ t('sb.aiReporting') }}</span>
     <span class="ms-auto" :title="t('sb.engineTip')">{{ t('sb.engine') }} <b class="text-body">CFR</b> · {{ t('sb.analysis') }} <b class="text-body">{{ state.config && state.config.aiEnabled ? 'AI' : t('sb.local') }}</b></span>
   </footer>

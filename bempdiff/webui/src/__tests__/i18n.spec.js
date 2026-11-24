@@ -1,6 +1,7 @@
 // R12 i18n（二期 T01477）——框架与首批覆盖验收。
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { t, setLocale, i18n, tTerm, TERM_TABLE, LOCALES, LANG_KEY, allKeys } from '../lib/i18n'
 import { state, defaultConfig } from '../store'
 import CompareOverlay from '../components/CompareOverlay.vue'
@@ -227,6 +228,21 @@ describe('R12 i18n 框架', () => {
     const sbZh = mount(StatusBar, { attachTo: document.body })
     expect(sbZh.text()).toContain('反编译引擎')
     sbZh.unmount()
+  })
+
+  it('P2-8 历史 AI 任务标题随语言切换实时求值（不留在创建时语言）', async () => {
+    setLocale('zh-CN')
+    state.aiPanelTab = 'console'
+    state.aiTasks = [{ id: 'ai-h', category: 'risk', title: '整体风险分析', titleKey: 'cat.risk', titleParams: {}, prompt: '', thinking: [], answer: '', status: 'done', thinkingCollapsed: true }]
+    state.aiActiveTaskId = 'ai-h'
+    state.job = { status: 'DONE' }
+    const w = mount(AiConsole, { attachTo: document.body })
+    expect(w.text()).toContain('整体风险分析')
+    setLocale('en-US')
+    await nextTick()
+    expect(w.text()).toContain('Overall Risk Analysis')
+    expect(w.text()).not.toContain('整体风险分析')
+    w.unmount()
   })
 
   it('批次7 组件跟随语言：AI 控制台/分析类别 EN 渲染', async () => {

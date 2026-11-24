@@ -306,7 +306,7 @@ public final class MainReflectTest {
                     ctx.getBuildSystem().startsWith("多项目仓库（1 个项目）"));
             Asserts.assertNotNull("模块列表不应为 null（聚合视图占位）", ctx.getModules());
             Asserts.assertTrue("上下文摘要应包含项目索引细节: " + ctx.getSummary(),
-                    ctx.getSummary().contains("Maven") && ctx.getSummary().contains("."));
+                    ctx.getSummary().contains("多项目仓库") && ctx.getSummary().contains("1 个项目"));
         } finally {
             com.bempdiff.ai.context.ProjectContextCache.clear(proj.toString());
         }

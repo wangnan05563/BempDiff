@@ -12,12 +12,14 @@ import com.bempdiff.ai.context.ProjectContextService;
 import com.bempdiff.config.AiConfig;
 import com.bempdiff.config.ParseConfig;
 import com.bempdiff.decompile.Decompiler;
+import com.bempdiff.diff.ApiCompat;
 import com.bempdiff.diff.DiffEngine;
 import com.bempdiff.diff.DiffResult;
 import com.bempdiff.diff.DiffStats;
 import com.bempdiff.diff.DiffStatus;
 import com.bempdiff.diff.AstNormalizer;
 import com.bempdiff.diff.FrontendTextDiff;
+import com.bempdiff.diff.ImpactAnalyzer;
 import com.bempdiff.diff.LibJarDiff;
 import com.bempdiff.diff.ArchiveTree;
 import com.bempdiff.export.AssetExporter;
@@ -50,9 +52,11 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -118,9 +122,16 @@ public final class BempServer {
                     + "风险与影响范围，并给出针对该文件的测试要点。不要提及其他文件或整体统计。";
 
     private final JobStore store = new JobStore();
+    // 已完成作业的状态响应含完整差异树，构建成本高；缓存后 Launchpad 恢复最近比对可秒开。
+    private final Map<String, Map<String, Object>> doneStatusCache = new ConcurrentHashMap<>();
+    // 洞察的静态部分（API 兼容/影响面/AST）只依赖比对结果；完成时预热，避免打开面板时重复反编译。
+    private final Map<String, ApiCompat.Result> compatCache = new ConcurrentHashMap<>();
+    private final Map<String, ImpactAnalyzer.Result> impactCache = new ConcurrentHashMap<>();
+    private final Map<String, Set<String>> insightKeysCache = new ConcurrentHashMap<>();
     private final ServerConfig config;
     private final AtomicLong seq = new AtomicLong(System.nanoTime() % 1_000_000);
     private final Path webroot;
+    private final ReviewStore reviewStore = new ReviewStore(); // T06218 文件级审阅独立持久化（不随 JobStore 淘汰）
     // 比对任务后台执行器（虚拟线程：每个比对一个轻量线程，互不阻塞；HTTP 处理函数仅负责提交与返回）。
     // 并发比对上限：避免用户连续提交大包时多个解析任务同时跑爆文件句柄/内存（虚拟线程本身无界）。
     private static final int MAX_CONCURRENT_COMPARES =
@@ -203,12 +214,15 @@ public final class BempServer {
     public void start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
         server.createContext("/api/session/compare", this::handleCompare);
+        server.createContext("/api/session/preflight", this::handlePreflight); // CX-09 比对前预检（只读、不建作业）
         server.createContext("/api/tasks/running", this::handleRunningTasks); // 桌面壳关闭前查询进行中任务，防误关直接中断长比对
         server.createContext("/api/job", this::handleJob);
         server.createContext("/api/export", this::handleExportApi);
         server.createContext("/api/entry", this::handleEntry);
         server.createContext("/api/file", this::handleFile);
         server.createContext("/api/config", this::handleConfig);
+        server.createContext("/api/sample", this::handleSample); // T06223 Launchpad 空态示例包（内置 sample_src）
+        server.createContext("/api/review", this::handleReview); // T06218 审阅文档读写（独立于 JobStore 生命周期）
         server.createContext("/api/ai/test", this::handleAiTest);
         server.createContext("/api/ai/models", this::handleAiModels);
         server.createContext("/api/ai/context", this::handleAiContext);
@@ -247,7 +261,7 @@ public final class BempServer {
 
     private static void addCors(HttpExchange ex) {
         ex.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-        ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
+        ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
         ex.getResponseHeaders().add("Access-Control-Allow-Headers", HDR_CONTENT_TYPE);
     }
 
@@ -326,6 +340,73 @@ public final class BempServer {
         return null;
     }
 
+    // ---------------- T06218 审阅文档 API ----------------
+
+    /**
+     * GET /api/review/{jobId}    读取审阅文档（不存在也返回空文档 + exists=false，供前端迁移旧数据）
+     * PUT /api/review/{jobId}    保存并规范化（文件 status 按 Hunk 聚合重算，手动覆盖优先）
+     * DELETE /api/review/{jobId} 删除（隐私清理/重开作业）
+     */
+    private void handleReview(HttpExchange ex) throws IOException {
+        String method = ex.getRequestMethod();
+        if ("OPTIONS".equalsIgnoreCase(method)) {
+            addCors(ex);
+            ex.sendResponseHeaders(204, -1);
+            ex.close();
+            return;
+        }
+        String path = ex.getRequestURI().getPath();
+        String prefix = "/api/review/";
+        if (!path.startsWith(prefix)) {
+            sendError(ex, 404, "未知的审阅接口");
+            return;
+        }
+        String jobId = path.substring(prefix.length());
+        if (jobId.contains("/") || jobId.isEmpty()) {
+            sendError(ex, 400, "缺少合法 jobId");
+            return;
+        }
+        try {
+            if ("GET".equalsIgnoreCase(method)) {
+                ReviewStore.LoadResult r = reviewStore.load(jobId);
+                Map<String, Object> resp = ReviewStatusCalculator.withSummary(r.doc);
+                resp.put("exists", r.exists);
+                resp.put("corruptBackup", r.corruptBackup);
+                sendJson(ex, 200, resp);
+                return;
+            }
+            if ("PUT".equalsIgnoreCase(method)) {
+                byte[] raw = readAll(ex.getRequestBody());
+                if (raw.length > ReviewStore.MAX_BODY_BYTES) {
+                    sendError(ex, 413, "审阅文档超过 8MB 上限");
+                    return;
+                }
+                Map<String, Object> body = Json.parseObject(new String(raw, StandardCharsets.UTF_8));
+                body.put("jobId", jobId); // 路径是唯一权威，忽略 body 里伪造 jobId
+                Map<String, Object> saved = reviewStore.save(jobId, body);
+                Map<String, Object> resp = ReviewStatusCalculator.withSummary(saved);
+                resp.put("exists", true);
+                resp.put("ok", true);
+                sendJson(ex, 200, resp);
+                return;
+            }
+            if ("DELETE".equalsIgnoreCase(method)) {
+                boolean deleted = reviewStore.delete(jobId);
+                Map<String, Object> resp = new LinkedHashMap<>();
+                resp.put("ok", true);
+                resp.put("deleted", deleted);
+                sendJson(ex, 200, resp);
+                return;
+            }
+            sendError(ex, 405, "仅支持 GET/PUT/DELETE");
+        } catch (IllegalArgumentException e) {
+            sendError(ex, 400, e.getMessage() == null ? "非法审阅请求" : e.getMessage());
+        } catch (Exception e) {
+            LOG.log(java.util.logging.Level.WARNING, "[Review] 读写失败 jobId=" + jobId, e);
+            sendError(ex, 500, "审阅文档读写失败: " + e.getMessage());
+        }
+    }
+
     private static String findJava() {
         String jh = System.getenv("JAVA_HOME");
         if (jh != null) {
@@ -343,6 +424,48 @@ public final class BempServer {
     }
 
     // ---------------- 比对 ----------------
+
+    /**
+     * CX-09 POST /api/session/preflight：比对前只读预检。
+     * 请求体与 /api/session/compare 同口径（leftType/leftPath/rightPath/options）；
+     * 永远返回 200 + {ok,level,blockers,warnings,infos,estimatedSeconds,left,right}，
+     * 让前端可以展示「阻断/警告/信息」三级结果，而不是把预检失败当接口错误。
+     */
+    private void handlePreflight(HttpExchange ex) throws IOException {
+        if (ex.getRequestMethod().equals(M_OPTIONS)) {
+            sendJson(ex, 204, new LinkedHashMap<>());
+            return;
+        }
+        if (!ex.getRequestMethod().equals("POST")) {
+            sendError(ex, 405, "仅支持 POST");
+            return;
+        }
+        try {
+            Map<String, Object> req = Json.parseObject(readBody(ex));
+            String leftType = Json.str(req, "leftType", "package");
+            String leftPath = Json.str(req, "leftPath", null);
+            String rightPath = Json.str(req, "rightPath", null);
+            if (leftPath == null || rightPath == null) {
+                sendError(ex, 400, "缺少 leftPath / rightPath");
+                return;
+            }
+            CompareOptions opts = CompareOptions.fromRequest(req);
+            String mode = MODE_FOLDER.equals(leftType) ? MODE_FOLDER : "package";
+            Map<String, Object> result = PreflightService.check(leftPath, rightPath, mode, opts.getIgnoreExtensions());
+            sendJson(ex, 200, result);
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "比对预检失败", e);
+            // 预检本身失败不阻断比对：返回 block=空、warn 说明，前端会提示后允许继续
+            Map<String, Object> fallback = new LinkedHashMap<>();
+            fallback.put("ok", true);
+            fallback.put("level", "warn");
+            fallback.put("blockers", new ArrayList<>());
+            fallback.put("warnings", List.of("预检服务异常：" + e.getMessage() + "；可直接继续比对"));
+            fallback.put("infos", new ArrayList<>());
+            fallback.put("estimatedSeconds", 1);
+            sendJson(ex, 200, fallback);
+        }
+    }
 
     private void handleCompare(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals(M_OPTIONS)) {
@@ -522,6 +645,7 @@ public final class BempServer {
 
             job.markRunning("building", "构建差异树…", 90);
             job.complete(oldSnap, newSnap, r, s);
+            warmInsightsAsync(job);
             // 解包不完整 / 存在条目读取失败超限：非致命，但差异/导出可能不完整，透出到 message 供前端提示。
             if (opts.isUnpackNested()) {
                 appendUnpackWarnings(job, repOld, repNew);
@@ -698,6 +822,7 @@ public final class BempServer {
                 sendJson(ex, 200, resp);
             }
             case "report" -> handleReport(ex, job);
+            case "insights" -> handleInsights(ex, job);
             case "unpack-report" -> handleUnpackReport(ex, job);
             case "export" -> {
                 // 大包异步导出入口：export/start 需第3段；否则走旧版同步导出端点（兼容旧调用）
@@ -723,14 +848,296 @@ public final class BempServer {
         resp.put(KEY_ERROR, job.getError());
         // 仅完成时回带完整产物；进行中只返回进度，避免前端在结果未就绪时读到 null 快照。
         if ("DONE".equals(job.getStatus())) {
+            Map<String, Object> cached = doneStatusCache.get(job.id);
+            if (cached != null) {
+                sendJson(ex, 200, cached);
+                return;
+            }
             resp.put("oldFile", job.getOldSnap().getFile().getFileName().toString());
             resp.put("newFile", job.getNewSnap().getFile().getFileName().toString());
             resp.put("oldVersion", nullToNA(job.getOldSnap().getVersion()));
             resp.put("newVersion", nullToNA(job.getNewSnap().getVersion()));
             resp.put("stats", statsJson(job.getStats()));
             resp.put("tree", buildTree(job.getResult(), job.getOldSnap(), job.getNewSnap(), job.opts.isUnpackNested()));
+            doneStatusCache.put(job.id, resp);
         }
         sendJson(ex, 200, resp);
+    }
+
+    /**
+     * 比对完成后异步预热洞察静态部分：反编译、API 兼容与影响面分析只做一次。
+     * 失败只记日志，不阻塞比对完成；用户首次打开洞察面板时若尚未完成，handleInsights 会同步补算。
+     */
+    private void warmInsightsAsync(Job job) {
+        try {
+            workers.submit(() -> {
+                try {
+                    Set<String> keys = new HashSet<>();
+                    for (List<String> list : job.getResult().getByStatus().values()) keys.addAll(list);
+                    loadInsightStatics(job, keys);
+                } catch (Exception e) {
+                    LOG.log(Level.FINE, "洞察预热失败 jobId=" + job.id, e);
+                }
+            });
+        } catch (Exception e) {
+            LOG.log(Level.FINE, "洞察预热任务提交失败 jobId=" + job.id, e);
+        }
+    }
+
+    /** 计算并缓存洞察的静态结果；缓存命中直接返回。 */
+    private synchronized ApiCompat.Result loadInsightStatics(Job job, Set<String> allKeys) {
+        ApiCompat.Result cached = compatCache.get(job.id);
+        if (cached != null) return cached;
+        AiWorkCache work = getAiWork(job);
+        ApiCompat.Result compat = ApiCompat.analyze(work.decompiled);
+        List<String> deletedKeys = new ArrayList<>();
+        for (String k : job.getResult().get(DiffStatus.DELETED)) {
+            if (k.endsWith(".java")) deletedKeys.add(k);
+        }
+        ImpactAnalyzer.Result impact = ImpactAnalyzer.analyze(work.decompiled, compat, deletedKeys);
+        compatCache.put(job.id, compat);
+        impactCache.put(job.id, impact);
+        insightKeysCache.put(job.id, allKeys);
+        return compat;
+    }
+
+    /**
+     * GET /api/job/{id}/insights?offset=0&limit=200
+     * M3 能力显性化：把已算好的静态 API 兼容/影响面/审阅进度/证据计数聚合成一个结构化响应。
+     * 只读、不重复反编译；条目分页裁剪，total 保留全量计数，避免大包响应无限膨胀。
+     */
+    private void handleInsights(HttpExchange ex, Job job) throws IOException {
+        if (!"DONE".equals(job.getStatus())) {
+            sendError(ex, 409, MSG_NOT_DONE + job.getStatus());
+            return;
+        }
+        try {
+            Set<String> allKeys = new HashSet<>();
+            for (List<String> keys : job.getResult().getByStatus().values()) allKeys.addAll(keys);
+            ApiCompat.Result compat = compatCache.get(job.id);
+            ImpactAnalyzer.Result impact = impactCache.get(job.id);
+            if (compat == null || impact == null) {
+                compat = loadInsightStatics(job, allKeys);
+                impact = impactCache.get(job.id);
+            }
+
+            int offset = Math.max(0, queryInt(ex, "offset", 0));
+            int limit = Math.max(1, Math.min(1000, queryInt(ex, "limit", 200)));
+
+            Map<String, Object> resp = new LinkedHashMap<>();
+            resp.put("schemaVersion", "1.0");
+            resp.put("jobId", job.id);
+            resp.put("generatedAt", java.time.OffsetDateTime.now().toString());
+
+            Map<String, Object> summary = new LinkedHashMap<>();
+            int breaking = compat.removed + compat.sigChanged;
+            summary.put("breaking", breaking);
+            summary.put("removed", compat.removed);
+            summary.put("signatureChanged", compat.sigChanged);
+            summary.put("added", compat.added);
+            summary.put("maxLevel", breaking > 0 ? "BREAKING" : (compat.added > 0 ? "ADDITIVE" : "NONE"));
+            resp.put("summary", summary);
+
+            AiWorkCache work = getAiWork(job);
+            resp.put("apiCompat", compatJson(compat, offset, limit, work.decompiled, allKeys));
+            resp.put("impact", impactJson(impact, offset, limit, allKeys));
+
+            Map<String, Object> rvDoc = reviewStore.load(job.id).doc;
+            Map<String, Object> rs = ReviewStatusCalculator.summarize(rvDoc);
+            int notes = 0;
+            int bookmarks = 0;
+            Object files = rvDoc.get("files");
+            if (files instanceof Map<?, ?> fm) {
+                for (Object v : fm.values()) {
+                    if (!(v instanceof Map<?, ?> file)) continue;
+                    if (file.get("notes") instanceof List<?> nl) notes += nl.size();
+                    if (file.get("bookmarks") instanceof List<?> bl) bookmarks += bl.size();
+                }
+            }
+            int changedFiles = job.getStats().getAdded() + job.getStats().getDeleted() + job.getStats().getModified();
+            int reviewTotal = Math.max(changedFiles, Json.intv(rs, "totalFiles", 0));
+            Map<String, Object> review = new LinkedHashMap<>(rs);
+            review.put("total", reviewTotal);
+            review.put("reviewed", Json.intv(rs, "reviewedFiles", 0));
+            review.put("inProgress", Json.intv(rs, "inProgressFiles", 0));
+            review.put("needsReview", Json.intv(rs, "needsReviewFiles", 0));
+            review.put("unreviewed", Json.intv(rs, "unreviewedFiles", 0));
+            review.put("notes", notes);
+            review.put("bookmarks", bookmarks);
+            review.put("filePercent", percentOf(Json.intv(rs, "reviewedFiles", 0), reviewTotal));
+            resp.put("reviewSummary", review);
+
+            Map<String, Object> ast = new LinkedHashMap<>();
+            int normalized = 0;
+            for (DecompiledUnit u : work.decompiled.values()) {
+                if (u != null && u.isOk() && u.getOldSource() != null && u.getNewSource() != null) normalized++;
+            }
+            ast.put("normalizedFiles", normalized);
+            ast.put("fallbackFiles", AstNormalizer.degradedCount());
+            ast.put("ignoredChanges", job.getResult().formattedOnlyCount());
+            resp.put("astSummary", ast);
+            sendJson(ex, 200, resp);
+        } catch (Exception e) {
+            LOG.log(Level.WARNING, "洞察聚合失败 jobId=" + job.id, e);
+            sendError(ex, 500, "洞察聚合失败: " + e.getMessage());
+        }
+    }
+
+    private Map<String, Object> compatJson(ApiCompat.Result compat, int offset, int limit,
+                                           Map<String, DecompiledUnit> units, Set<String> allKeys) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("total", compat.items.size());
+        out.put("offset", offset);
+        out.put("limit", limit);
+        out.put("truncated", offset + limit < compat.items.size());
+        out.put("removed", compat.removed);
+        out.put("signatureChanged", compat.sigChanged);
+        out.put("added", compat.added);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        int breaking = compat.removed + compat.sigChanged;
+        summary.put("breaking", breaking);
+        summary.put("maxLevel", breaking > 0 ? "BREAKING" : (compat.added > 0 ? "ADDITIVE" : "NONE"));
+        out.put("summary", summary);
+        List<Object> items = new ArrayList<>();
+        for (int i = offset; i < compat.items.size() && items.size() < limit; i++) {
+            ApiCompat.Item it = compat.items.get(i);
+            Map<String, Object> m = new LinkedHashMap<>();
+            String level = it.level.name();
+            m.put("id", "api-" + i);
+            m.put("kind", switch (it.level) {
+                case REMOVED_API -> "method-removed";
+                case SIGNATURE_CHANGED -> "signature-changed";
+                case ADDED_API -> "api-added";
+            });
+            m.put("level", level);
+            m.put("className", it.cls);
+            m.put("class", it.cls);
+            m.put("member", memberName(it.api));
+            m.put("signature", it.api);
+            m.put("change", switch (it.level) {
+                case REMOVED_API -> "method-removed";
+                case SIGNATURE_CHANGED -> "signature-changed";
+                case ADDED_API -> "api-added";
+            });
+            m.put("sourceImpact", it.level == ApiCompat.Level.ADDED_API ? "COMPATIBLE" : "BREAKING");
+            m.put("binaryImpact", it.level == ApiCompat.Level.ADDED_API ? "COMPATIBLE" : "BREAKING");
+            m.put("confidence", "deterministic");
+            m.put("evidence", List.of("javac-signature:" + it.cls + "#" + it.api));
+            m.put("fileKey", fileKeyForClass(it.cls, units, allKeys));
+            items.add(m);
+        }
+        out.put("items", items);
+        return out;
+    }
+
+    private Map<String, Object> impactJson(ImpactAnalyzer.Result impact, int offset, int limit,
+                                           Set<String> allKeys) {
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("total", impact.items.size());
+        out.put("offset", offset);
+        out.put("limit", limit);
+        out.put("truncated", offset + limit < impact.items.size());
+        out.put("critical", impact.critical);
+        out.put("high", impact.high);
+        out.put("medium", impact.medium);
+        out.put("low", impact.low);
+        out.put("maxRisk", impact.isEmpty() ? "NONE" : impact.maxRisk().name());
+        List<Object> items = new ArrayList<>();
+        for (int i = offset; i < impact.items.size() && items.size() < limit; i++) {
+            ImpactAnalyzer.ImpactItem it = impact.items.get(i);
+            Map<String, Object> m = new LinkedHashMap<>();
+            String rawClass = it.changedClass == null ? "" : it.changedClass;
+            // ImpactAnalyzer 的 changedClass 在部分路径下直接是差异树 key（com/x/Foo.class），
+            // 部分路径是点号类名；统一输出点号类名，并用原 key 直接回填 fileKey，避免跳转丢失。
+            String fileKey = rawClass;
+            String className = rawClass;
+            if (rawClass.contains("/")) {
+                if (rawClass.endsWith(".class")) {
+                    className = rawClass.substring(0, rawClass.length() - 6).replace('/', '.');
+                } else if (rawClass.endsWith(".java")) {
+                    className = rawClass.substring(0, rawClass.length() - 5).replace('/', '.');
+                } else {
+                    className = rawClass.replace('/', '.');
+                }
+            } else {
+                fileKey = fileKeyForClass(rawClass, null, allKeys);
+            }
+            m.put("id", "impact-" + i);
+            m.put("className", className);
+            m.put("changedClass", className);
+            m.put("status", it.status);
+            m.put("risk", it.risk.name());
+            m.put("reason", it.reason);
+            m.put("change", "class-contract");
+            m.put("confidence", "static");
+            m.put("fileKey", fileKey);
+            m.put("evidence", it.referencedBy.isEmpty() ? List.of("no-static-reference") : it.referencedBy);
+            List<Object> callers = new ArrayList<>();
+            for (String key : it.referencedBy) {
+                Map<String, Object> c = new LinkedHashMap<>();
+                String cls = key.endsWith(".java") ? key.substring(0, key.length() - 5)
+                        : (key.endsWith(".class") ? key.substring(0, key.length() - 6) : key);
+                c.put("className", cls.replace('/', '.'));
+                c.put("fileKey", key);
+                c.put("method", null);
+                c.put("line", null);
+                callers.add(c);
+            }
+            m.put("callers", callers);
+            m.put("entries", List.of());
+            m.put("tests", List.of());
+            items.add(m);
+        }
+        out.put("items", items);
+        return out;
+    }
+
+    private static String memberName(String api) {
+        int paren = api.indexOf('(');
+        int colon = api.indexOf(':');
+        int cut = paren > 0 ? paren : (colon > 0 ? colon : api.length());
+        return api.substring(0, cut);
+    }
+
+    private static String fileKeyForClass(String cls, Map<String, DecompiledUnit> units, Set<String> allKeys) {
+        if (cls == null) return null;
+        String base = cls.replace('.', '/');
+        String javaKey = base + ".java";
+        String classKey = base + ".class";
+        if (units != null) {
+            for (String key : units.keySet()) {
+                if (key.equals(javaKey) || key.endsWith("/" + javaKey)) return key;
+                if (key.equals(classKey) || key.endsWith("/" + classKey)) return key;
+            }
+        }
+        if (allKeys != null) {
+            for (String key : allKeys) {
+                if (key.equals(javaKey) || key.endsWith("/" + javaKey)) return key;
+                if (key.equals(classKey) || key.endsWith("/" + classKey)) return key;
+            }
+        }
+        return null;
+    }
+
+    private static int percentOf(int part, int total) {
+        if (total <= 0) return 0;
+        return Math.max(0, Math.min(100, (int) Math.round(part * 100.0 / total)));
+    }
+
+    private static int queryInt(HttpExchange ex, String name, int fallback) {
+        String q = ex.getRequestURI().getRawQuery();
+        if (q == null || q.isEmpty()) return fallback;
+        for (String pair : q.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq <= 0) continue;
+            if (!name.equals(pair.substring(0, eq))) continue;
+            try {
+                return Integer.parseInt(pair.substring(eq + 1));
+            } catch (NumberFormatException ignored) {
+                return fallback;
+            }
+        }
+        return fallback;
     }
 
     private void handleReport(HttpExchange ex, Job job) throws IOException {
@@ -839,6 +1246,8 @@ public final class BempServer {
         if (normCat != null) summary.setCategory(normCat);
         List<FileAnalysis> b = analyzer.stageB(bCands, aiCfg, ctx, focus);
         MarkdownReport rep = new MarkdownReport(job.opts.getTopK());
+        // 审计摘要如实标注 AI 执行模式：真实模型 vs 离线 Mock 兜底
+        rep.setAiRealLlm(realLlm);
         // 报告 AI 章节标注本次分析聚焦项，让「所选分析项」在报告内容中显式可见
         rep.setAiFocus(categoryLabel(category, prompt));
         // T01810 FR-006 展示层：AST 折叠/降级计数——AI 与非 AI 两条报告路径同口径
@@ -1279,6 +1688,17 @@ public final class BempServer {
         }
     }
 
+    /** P2-4：判断差异集合里是否存在可导出的 lib/*.jar（与 AssetExporter.exportDiffJars 的过滤口径一致）。 */
+    private static boolean hasDiffJars(DiffResult r) {
+        if (r == null) return false;
+        for (DiffStatus st : new DiffStatus[]{DiffStatus.ADDED, DiffStatus.DELETED, DiffStatus.MODIFIED}) {
+            for (String k : r.get(st)) {
+                if (k != null && k.endsWith(".jar") && k.contains("/lib/")) return true;
+            }
+        }
+        return false;
+    }
+
     /** 导出入口：小包同步流式（200 zip，前端读流显示进度）；大包异步生成（202 JSON 任务 id，前端轮询）。 */
     private void handleExportStart(HttpExchange ex, Job job) throws IOException {
         if (!"DONE".equals(job.getStatus())) {
@@ -1290,6 +1710,12 @@ public final class BempServer {
         // T02742：导出粒度（all=增量全量 / jar=变化 jar / class=变化 class）；缺省回退 all 保持向后兼容。
         String granularity = Json.str(reqBody, "granularity", "all");
         DiffResult r = job.getResult();
+        // P2-4：JAR 粒度只对 lib/*.jar 的差异有意义；没有变化 jar 时若继续打包，
+        // 会下发一个只有空目录的 zip，用户误以为导出成功。服务端统一兜底 409。
+        if ("jar".equals(granularity) && !hasDiffJars(r)) {
+            sendError(ex, 409, "本次差异不包含 lib/*.jar（依赖 JAR 未增删改），无法按 JAR 粒度导出；请改用全量或 CLASS 粒度");
+            return;
+        }
         Map<String, Object> est = exportEstimate(r, job.getOldSnap().getEntries(), job.getNewSnap().getEntries());
         long files = ((Number) est.get(KEY_FILES)).longValue();
         long bytes = ((Number) est.get("bytes")).longValue();
@@ -1886,6 +2312,28 @@ public final class BempServer {
 
     // ---------------- 配置 ----------------
 
+    /** T06223：Launchpad 空态一键示例包，返回内置 sample_src 的绝对路径（只读，不落库）。 */
+    private void handleSample(HttpExchange ex) throws IOException {
+        if (!"GET".equalsIgnoreCase(ex.getRequestMethod())) {
+            sendError(ex, 405, "仅支持 GET");
+            return;
+        }
+        Path base = Paths.get("bempdiff", "sample_src").toAbsolutePath().normalize();
+        Path left = base.resolve("v1");
+        Path right = base.resolve("v2");
+        if (!Files.isDirectory(left) || !Files.isDirectory(right)) {
+            sendError(ex, 404, "内置示例包不存在：" + base);
+            return;
+        }
+        Map<String, Object> resp = new LinkedHashMap<>();
+        resp.put("label", "InvoiceService 示例");
+        resp.put("leftType", "folder");
+        resp.put("leftPath", left.toString());
+        resp.put("rightPath", right.toString());
+        resp.put("description", "内置小样本：v1 → v2 的 Java 服务变更，一键比对并生成报告");
+        sendJson(ex, 200, resp);
+    }
+
     private void handleConfig(HttpExchange ex) throws IOException {
         if (ex.getRequestMethod().equals(M_OPTIONS)) {
             sendJson(ex, 204, new LinkedHashMap<>());
@@ -2341,6 +2789,7 @@ public final class BempServer {
                 + "<li><code>POST /api/session/compare</code> 比对（package/folder）</li>"
                 + "<li><code>GET /api/job/{id}/status</code> 任务状态/差异树</li>"
                 + "<li><code>GET /api/entry/decompile?jobId=&amp;key=</code> 单文件反编译</li>"
+                + "<li><code>GET/PUT/DELETE /api/review/{jobId}</code> 文件级审阅文档（独立持久化）</li>"
                 + "<li><code>GET/PUT /api/config</code> 配置</li>"
                 + "<li><code>POST /api/ai/test</code> AI 连接测试</li>"
                 + "<li><code>POST /api/ai/models</code> 自动获取模型列表</li>"

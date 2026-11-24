@@ -284,3 +284,7 @@ Assert-InputFresh
 
 Write-Host "`n[完成] dist_input 已就绪：$DistInput" -ForegroundColor Green
 Write-Host "  打包请运行：npm run dist（electron-builder，消费 dist_input/{app,jre,webui}）" -ForegroundColor Green
+
+# robocopy 复制成功时返回 1，会把进程退出码污染成 1；装配已成功，显式归一为 0，
+# 让 CI/一键发布据退出码判成败时不再误判（T06236 构建验证发现）。
+exit 0

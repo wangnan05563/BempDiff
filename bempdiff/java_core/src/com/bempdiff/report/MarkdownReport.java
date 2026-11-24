@@ -67,6 +67,9 @@ public final class MarkdownReport {
     /** FR-013：AI 实际消耗行（如「输入 1234 / 输出 567 tokens（3 次调用）」；空串=不插入）。 */
     private String aiUsageLine = "";
 
+    /** 本次 AI 章节是否由真实 LLM 产出（false=离线 Mock 兜底）；仅用于审计摘要口径，不参与正文渲染。 */
+    private boolean aiRealLlm = true;
+
     /** T01810 FR-006 展示层：AST 口径「格式或位置变更」条目数（0=不渲染统计行）。 */
     private int formattedOnlyCount = 0;
 
@@ -76,6 +79,12 @@ public final class MarkdownReport {
     /** 设置 AI 实际消耗行（渲染进审计摘要，输入/输出分段）。 */
     public MarkdownReport setAiUsageLine(String line) {
         this.aiUsageLine = line == null ? "" : line;
+        return this;
+    }
+
+    /** 标记本次 AI 章节是否真实调用模型（false=离线 Mock），审计摘要据此避免「已接入」误述。 */
+    public MarkdownReport setAiRealLlm(boolean realLlm) {
+        this.aiRealLlm = realLlm;
         return this;
     }
 
@@ -589,10 +598,15 @@ public final class MarkdownReport {
     }
 
     private void renderHeader(StringBuilder sb, PackageSnapshot oldSnap, PackageSnapshot newSnap) {
-        sb.append("# 差异分析报告（Java 端口 / 真实包比对）\n\n");
-        sb.append("- 老包：`").append(oldSnap.getFile().getFileName()).append(VER_BEGIN)
+        // 标题不绑定 Java 端口：目录模式主要输出源码差异，包模式输出 class 反编译差异，统一用产品口径
+        sb.append("# 差异分析报告（BempDiff 包/目录比对）\n\n");
+        // 目录模式用「老目录/新目录」，避免把解压目录误读成构建包
+        boolean folderMode = oldSnap.getFile() != null && Files.isDirectory(oldSnap.getFile());
+        String oldLabel = folderMode ? "老目录" : "老包";
+        String newLabel = folderMode ? "新目录" : "新包";
+        sb.append("- ").append(oldLabel).append("：`").append(oldSnap.getFile().getFileName()).append(VER_BEGIN)
                 .append(nullToNA(oldSnap.getVersion())).append("）\n");
-        sb.append("- 新包：`").append(newSnap.getFile().getFileName()).append(VER_BEGIN)
+        sb.append("- ").append(newLabel).append("：`").append(newSnap.getFile().getFileName()).append(VER_BEGIN)
                 .append(nullToNA(newSnap.getVersion())).append("）\n\n");
     }
 
@@ -629,6 +643,12 @@ public final class MarkdownReport {
 
     private void renderDecompiledDiff(StringBuilder sb, Map<String, DecompiledUnit> decompiled) {
         sb.append("## 三、反编译源码级差异（Top-").append(topK).append(" 修改/新增/删除 Java 类）\n");
+        if (decompiled.isEmpty()) {
+            sb.append("> 本次未收集到可反编译的 Java class。目录模式的 .java 源码差异见第四节；"
+                    + "包模式若需分析三方包内 class，请在「配置中心 → 解析与导出」开启“展开全部（含三方 class）”"
+                    + "后重新比对（普通 jar 自身的业务 class 默认按 L1 收集）。\n\n");
+            return;
+        }
         sb.append("> 共 ").append(decompiled.size()).append(" 个类已反编译（本处仅展示前 Top-K 条，"
                 + "且每条仅列变更行：附原始/修改后行号与变更类型——修改/新增/删除，不展示整个文件）。\n\n");
         int shown = 0;
@@ -804,14 +824,14 @@ public final class MarkdownReport {
     }
 
     /**
-     * 文本类文件内容差异（配置文件 XML/Properties、JSP、前端 JS/HTML/CSS）：压缩/单行资源已
+     * 文本类文件内容差异（配置文件 XML/Properties、JSP、Java 源码、前端 JS/HTML/CSS）：压缩/单行资源已
      * 美化或换行归一后做内容级逐行 diff，使改动可读（FR4.4 增强 + 本需求扩展）。
      */
     private void renderTextDiff(StringBuilder sb, Map<String, DecompiledUnit> text) {
         sb.append("## 四、文本类文件内容差异（Top-").append(topK)
-          .append(" 修改/新增/删除 配置文件/JSP/JS/HTML/CSS）\n");
+          .append(" 修改/新增/删除 配置文件/JSP/Java 源码/JS/HTML/CSS）\n");
         if (isEmptyMap(text)) {
-            sb.append("- 无文本类文件（配置文件/JSP/前端源码）变动。\n\n");
+            sb.append("- 无文本类文件（配置文件/JSP/Java 源码/前端源码）变动。\n\n");
             return;
         }
         sb.append("> 共 ").append(text.size()).append(" 个文本类文件已做内容级逐行 diff")
@@ -858,7 +878,15 @@ public final class MarkdownReport {
         sb.append("- 比对时间：").append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date())).append("\n");
         sb.append("- 老包标识：").append(nullToNA(oldSnap.getVersion())).append("\n");
         sb.append("- 新包标识：").append(nullToNA(newSnap.getVersion())).append("\n");
-        sb.append("- AI 分析：").append(aiEnabled ? "已接入（含项目级上下文增强）" : "未接入，本报告不含 AI 章节。").append("\n");
+        sb.append("- AI 分析：");
+        if (!aiEnabled) {
+            sb.append("未接入，本报告不含 AI 章节。");
+        } else if (aiRealLlm) {
+            sb.append("已接入真实模型（含项目级上下文增强）。");
+        } else {
+            sb.append("已生成 AI 章节，但为离线兜底（未调用真实模型，未配置 API Key 或开关未开启）。");
+        }
+        sb.append("\n");
         // FR-013：实际消耗（输入/输出分段）；仅 AI 报告且后端返回了 usage 时出现
         if (aiEnabled && aiUsageLine != null && !aiUsageLine.isEmpty()) {
             sb.append("- AI 实际消耗：").append(aiUsageLine).append("\n");

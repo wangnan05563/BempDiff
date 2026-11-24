@@ -1,0 +1,588 @@
+{
+  "job": "job-431001",
+  "viewport": {
+    "width": 1280,
+    "height": 800
+  },
+  "ready": true,
+  "base": {
+    "overflow": {
+      "innerWidth": 1280,
+      "doc": {
+        "client": 1280,
+        "scroll": 1280
+      },
+      "body": {
+        "client": 1280,
+        "scroll": 1280
+      },
+      "app": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "bar": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "block"
+      },
+      "barMain": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "paths": {
+        "client": 780,
+        "scroll": 780,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "main": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "tree": {
+        "client": 279,
+        "scroll": 279,
+        "overflowX": "auto",
+        "display": "block"
+      },
+      "diff": {
+        "client": 668,
+        "scroll": 668,
+        "overflowX": "hidden",
+        "display": "flex"
+      },
+      "status": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      }
+    },
+    "compareBar": {
+      "height": 42,
+      "hasPathPills": 2,
+      "runLabel": "比对",
+      "search": true,
+      "typeButtons": 2,
+      "more": true,
+      "treeW": 280,
+      "aiW": 320,
+      "aiCollapsed": false
+    },
+    "jobRows": 30,
+    "treeFiles": 4,
+    "review": " 审阅 0/1 · 0% Hunk 0/2"
+  },
+  "expanded": {
+    "overflow": {
+      "innerWidth": 1280,
+      "doc": {
+        "client": 1280,
+        "scroll": 1280
+      },
+      "body": {
+        "client": 1280,
+        "scroll": 1280
+      },
+      "app": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "bar": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "block"
+      },
+      "barMain": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "paths": {
+        "client": 780,
+        "scroll": 780,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "main": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "tree": {
+        "client": 279,
+        "scroll": 279,
+        "overflowX": "auto",
+        "display": "block"
+      },
+      "diff": {
+        "client": 668,
+        "scroll": 668,
+        "overflowX": "hidden",
+        "display": "flex"
+      },
+      "status": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      }
+    },
+    "editor": true,
+    "editSides": 2,
+    "breadcrumbs": 2,
+    "gridColumns": "628.797px 628.812px",
+    "editorHeight": 78
+  },
+  "search": {
+    "before": 4,
+    "after": 2,
+    "filteredTexts": "src|Bar.java",
+    "restored": 4
+  },
+  "menu": {
+    "overflow": {
+      "innerWidth": 1280,
+      "doc": {
+        "client": 1280,
+        "scroll": 1280
+      },
+      "body": {
+        "client": 1280,
+        "scroll": 1280
+      },
+      "app": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "bar": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "block"
+      },
+      "barMain": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "paths": {
+        "client": 780,
+        "scroll": 780,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "main": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "tree": {
+        "client": 279,
+        "scroll": 279,
+        "overflowX": "auto",
+        "display": "block"
+      },
+      "diff": {
+        "client": 668,
+        "scroll": 668,
+        "overflowX": "hidden",
+        "display": "flex"
+      },
+      "status": {
+        "client": 1280,
+        "scroll": 1280,
+        "overflowX": "visible",
+        "display": "flex"
+      }
+    },
+    "visible": true,
+    "items": 12,
+    "groups": [
+      "输出",
+      "AI 分析",
+      "视图",
+      "比对会话"
+    ],
+    "rect": {
+      "x": 1016,
+      "y": 40,
+      "width": 256,
+      "height": 544
+    }
+  },
+  "at1440": {
+    "overflow": {
+      "innerWidth": 1440,
+      "doc": {
+        "client": 1440,
+        "scroll": 1440
+      },
+      "body": {
+        "client": 1440,
+        "scroll": 1440
+      },
+      "app": {
+        "client": 1440,
+        "scroll": 1440,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "bar": {
+        "client": 1440,
+        "scroll": 1440,
+        "overflowX": "visible",
+        "display": "block"
+      },
+      "barMain": {
+        "client": 1440,
+        "scroll": 1440,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "paths": {
+        "client": 940,
+        "scroll": 940,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "main": {
+        "client": 1440,
+        "scroll": 1440,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "tree": {
+        "client": 299,
+        "scroll": 299,
+        "overflowX": "auto",
+        "display": "block"
+      },
+      "diff": {
+        "client": 748,
+        "scroll": 748,
+        "overflowX": "hidden",
+        "display": "flex"
+      },
+      "status": {
+        "client": 1440,
+        "scroll": 1440,
+        "overflowX": "visible",
+        "display": "flex"
+      }
+    },
+    "treeW": 300,
+    "aiW": 380
+  },
+  "at1200": {
+    "overflow": {
+      "innerWidth": 1200,
+      "doc": {
+        "client": 1200,
+        "scroll": 1200
+      },
+      "body": {
+        "client": 1200,
+        "scroll": 1200
+      },
+      "app": {
+        "client": 1200,
+        "scroll": 1200,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "bar": {
+        "client": 1200,
+        "scroll": 1200,
+        "overflowX": "visible",
+        "display": "block"
+      },
+      "barMain": {
+        "client": 1200,
+        "scroll": 1200,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "paths": {
+        "client": 813,
+        "scroll": 813,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "main": {
+        "client": 1200,
+        "scroll": 1200,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "tree": {
+        "client": 259,
+        "scroll": 259,
+        "overflowX": "auto",
+        "display": "block"
+      },
+      "diff": {
+        "client": 890,
+        "scroll": 890,
+        "overflowX": "hidden",
+        "display": "flex"
+      },
+      "status": {
+        "client": 1200,
+        "scroll": 1200,
+        "overflowX": "visible",
+        "display": "flex"
+      }
+    },
+    "treeW": 260,
+    "aiW": 44,
+    "aiCollapsed": true,
+    "barHeight": 42
+  },
+  "at900Default": {
+    "overflow": {
+      "innerWidth": 900,
+      "doc": {
+        "client": 900,
+        "scroll": 900
+      },
+      "body": {
+        "client": 900,
+        "scroll": 900
+      },
+      "app": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "bar": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "block"
+      },
+      "barMain": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "paths": {
+        "client": 560,
+        "scroll": 560,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "main": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "tree": {
+        "client": 0,
+        "scroll": 0,
+        "overflowX": "auto",
+        "display": "block"
+      },
+      "diff": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "hidden",
+        "display": "flex"
+      },
+      "status": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      }
+    },
+    "treeDisplay": "none",
+    "aiDisplay": "none",
+    "treeW": 0,
+    "aiW": 0,
+    "diffW": 900,
+    "mobileNav": "flex"
+  },
+  "at900Tree": {
+    "overflow": {
+      "innerWidth": 900,
+      "doc": {
+        "client": 900,
+        "scroll": 900
+      },
+      "body": {
+        "client": 900,
+        "scroll": 900
+      },
+      "app": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "bar": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "block"
+      },
+      "barMain": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "paths": {
+        "client": 560,
+        "scroll": 560,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "main": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "tree": {
+        "client": 319,
+        "scroll": 319,
+        "overflowX": "auto",
+        "display": "block"
+      },
+      "diff": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "hidden",
+        "display": "flex"
+      },
+      "status": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      }
+    },
+    "treeDisplay": "flex",
+    "treeW": 320,
+    "diffW": 900,
+    "treeTop": 42,
+    "barBottom": 42
+  },
+  "at900Ai": {
+    "overflow": {
+      "innerWidth": 900,
+      "doc": {
+        "client": 900,
+        "scroll": 900
+      },
+      "body": {
+        "client": 900,
+        "scroll": 900
+      },
+      "app": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "bar": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "block"
+      },
+      "barMain": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "paths": {
+        "client": 560,
+        "scroll": 560,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "main": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      },
+      "tree": {
+        "client": 0,
+        "scroll": 0,
+        "overflowX": "auto",
+        "display": "block"
+      },
+      "diff": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "hidden",
+        "display": "flex"
+      },
+      "status": {
+        "client": 900,
+        "scroll": 900,
+        "overflowX": "visible",
+        "display": "flex"
+      }
+    },
+    "treeDisplay": "none",
+    "aiDisplay": "flex",
+    "aiW": 320,
+    "diffW": 900
+  },
+  "toggle": {
+    "beforeRows": 30,
+    "beforeFiles": 4,
+    "beforeReview": " 审阅 0/1 · 0% Hunk 0/2",
+    "legacy": {
+      "hasBar": false,
+      "hasToolbar": true,
+      "rows": 30,
+      "files": 4,
+      "review": " 审阅 0/1 · 0% Hunk 0/2",
+      "hscroll": false
+    },
+    "back": {
+      "hasBar": true,
+      "rows": 30,
+      "files": 4,
+      "review": " 审阅 0/1 · 0% Hunk 0/2"
+    }
+  },
+  "reloadLegacy": {
+    "hasBar": false,
+    "hasToolbar": true,
+    "rows": 30,
+    "files": 4,
+    "review": " 审阅 0/1 · 0% Hunk 0/2"
+  },
+  "reloadNew": {
+    "hasBar": true,
+    "hasToolbar": false,
+    "rows": 30,
+    "files": 4
+  }
+}

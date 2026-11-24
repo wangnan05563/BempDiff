@@ -7,9 +7,16 @@ import { loadIgnoreRules, saveIgnoreRules, addRule as addRuleFn, removeRule as r
 import { hlThemeOf } from './lib/hl_themes'
 import { friendlyAiError } from './lib/ai_error'
 import { resolveAppVersion } from './lib/helpContent'
+import { buildDiffCsv, downloadCsv } from './lib/csv_export'
+import { initTokenRegistry, applyTokenTheme, THEMES, THEME_NAMES, resolveTokenTheme, resolveBootstrapMode } from './design/tokenRegistry'
 import { t } from './lib/i18n'
 // 别名导入：runAiTaskStream(task) 等函数以 t 作任务参数名，函数体内用 tr() 取译文避免覆蔽冲突
 import { t as tr } from './lib/i18n'
+import { REVIEW_STATUS, emptyReviewDoc, normalizeReviewDoc, summarizeReview, updateReviewFile, migrateLegacyReviews } from './lib/review'
+import {
+  normalizeFileNotes, normalizeFileBookmarks, normalizeReviewNote, upsertReviewNote, removeReviewNote,
+  toggleReviewBookmark, validateReviewNote, noteTargetKey
+} from './lib/review_notes'
 
 // 状态相关展示常量，集中维护，DiffTree/DiffView/InfoPanel 共享，避免重复定义
 // label 保留中文原文（兼容既有单测断言）；labelKey 为 i18n 键（渲染侧优先 t(labelKey)）
@@ -32,8 +39,69 @@ export function statusLabel(s) {
 //   decompile - 反编译结果，null 表示还没好；{ ok:false, ... } 表示不可反编译
 //   busy      - true 表示反编译请求中（即便 decompile 已为 null）
 //   error     - 反编译抛异常的 message；与 decompile.ok=false 区分（一个是后端说不行，一个是网络/解析挂了）
+// ===== T06219 工作区 IA / 旧布局回退 =====
+// 默认启用新版 Compare Bar + 三栏 IA；URL `?reviewCockpit=0` 或 localStorage 可强制回退旧 ToolBar。
+// 仅影响布局壳，job/paths/review/tabs 等数据全部留在同一 state，切换不丢数据（AC-05）。
+const REVIEW_COCKPIT_KEY = 'bempdiff.reviewCockpit'
+function readReviewCockpit() {
+  try {
+    if (typeof window !== 'undefined') {
+      const q = new URLSearchParams(window.location.search).get('reviewCockpit')
+      if (q !== null) return !/^(0|false|off)$/i.test(q)
+      const raw = localStorage.getItem(REVIEW_COCKPIT_KEY)
+      if (raw !== null) return !/^(0|false|off)$/i.test(raw)
+    }
+  } catch (_) { /* 本地存储不可用默认新版 */ }
+  return true
+}
+export function setReviewCockpit(v) {
+  state.reviewCockpit = !!v
+  try { localStorage.setItem(REVIEW_COCKPIT_KEY, state.reviewCockpit ? '1' : '0') } catch (_) { /* 静默 */ }
+}
+export function toggleReviewCockpit() { setReviewCockpit(!state.reviewCockpit) }
+
+// T06223 Launchpad：默认作为工作区首屏；本地偏好可关闭。旧 IA（reviewCockpit=0）不显示。
+const LAUNCHPAD_KEY = 'bempdiff.launchpad'
+function readLaunchpadPref() {
+  try {
+    const raw = localStorage.getItem(LAUNCHPAD_KEY)
+    if (raw !== null) return !/^(0|false|off)$/i.test(raw)
+  } catch (_) { /* 本地存储不可用默认展示 */ }
+  return true
+}
+export function setLaunchpadEnabled(v) {
+  state.launchpadOpen = !!v
+  try { localStorage.setItem(LAUNCHPAD_KEY, state.launchpadOpen ? '1' : '0') } catch (_) { /* 静默 */ }
+}
+/** 只改「下次启动是否显示」偏好，不关闭当前工作台。 */
+export function setLaunchpadStartup(v) {
+  try { localStorage.setItem(LAUNCHPAD_KEY, v ? '1' : '0') } catch (_) { /* 静默 */ }
+}
+export function isLaunchpadStartupEnabled() { return readLaunchpadPref() }
+export function openLaunchpad() {
+  state.launchpadOpen = true
+  state.mobileTreeOpen = false
+  state.mobileAiOpen = false
+}
+export function closeLaunchpad() { state.launchpadOpen = false }
+export function setInsightTab(tab) {
+  const allowed = ['overview', 'compat', 'impact', 'evidence', 'console']
+  state.insightTab = allowed.includes(tab) ? tab : 'overview'
+  try { localStorage.setItem('bempdiff.insightTab', state.insightTab) } catch (_) { /* 静默 */ }
+}
+function readInsightTab() {
+  try {
+    const saved = localStorage.getItem('bempdiff.insightTab')
+    if (saved && ['overview', 'compat', 'impact', 'evidence', 'console'].includes(saved)) return saved
+  } catch (_) { /* 静默 */ }
+  return 'overview'
+}
+
 export const state = reactive({
-  theme: localStorage.getItem('bempdiff-theme') || 'light', // 偏好值：light|dark|system（system 由 applyTheme 实时解析；字面量与下方 THEME_KEY 保持一致，此处先于其声明执行）
+  reviewCockpit: readReviewCockpit(), // T06219：新版工作区 IA；false 回退旧 ToolBar
+  theme: localStorage.getItem('bempdiff-theme') || 'system', // 偏好值：light|dark|midnight|paper|contrast|system；首次启动默认 System（TH-02 AC5）
+  diffPalette: localStorage.getItem('bempdiff.diffPalette') === 'colorblind' ? 'colorblind' : 'default', // TH-03 色盲安全 diff 调色板
+  lastThemeSwitchMs: 0, // TH-02：上一次主题切换的 JS 落盘耗时（仅属性写入+localStorage，不代表首帧绘制）
   accent: 'blue',        // R10 主题强调色 key（ToolBar 启动时从 localStorage 恢复）
   job: null,
   leftType: 'package',     // 比对输入类型：package（war/jar）| folder（解压目录）
@@ -49,7 +117,19 @@ export const state = reactive({
   reporting: false,        // 生成报告锁：防止自动报告（比对后）与手动报告并发重叠
   aiPanelCollapsed: false, // 智能分析栏收起状态（与 DiffView 文件栏一键显隐联动，避免遮挡对比窗口）
   treePanelCollapsed: false, // 差异文件树栏收起状态（收起后横向空间全部让给比对窗口）
+  mobileTreeOpen: false,   // T06219 <1080 单栏：左树以抽屉覆盖层打开（不持久化）
+  mobileAiOpen: false,     // T06219 <1080 单栏：右栏以抽屉覆盖层打开（不持久化）
   aiPanelTab: 'file',      // 智能分析栏内容子视图：file/global/break/audit/console（控制台为独立 tab，独占内容区高度）
+  // ===== T06223 Launchpad / T06227-28 洞察页签 =====
+  // Launchpad 默认开启（可在页面内关闭记住偏好）；旧布局（reviewCockpit=0）不展示，保证可回退。
+  launchpadOpen: readLaunchpadPref(),
+  launchpadBusy: false,
+  launchpadInvalid: {},   // 历史项 key: oldPath|newPath → 失效原因（点击后探测，不主动扫描全部路径）
+  insightTab: readInsightTab(), // overview | compat | impact | evidence | console
+  insights: null,         // /api/job/{id}/insights 结构化结果
+  insightsLoading: false,
+  insightsError: '',
+  hunkJump: null,         // { key, hunkIndex, seq } 洞察条目 → 文件/Hunk 定位请求
   aiClassify: {},          // 智能分类结果：key -> { risk(HIGH/MEDIUM/LOW), category, reason }（A1+B2）
   classifying: false,      // 智能分类进行中
   exporting: false,        // 差异资产导出中（驱动导出按钮的加载态，避免重复点击）
@@ -60,9 +140,12 @@ export const state = reactive({
   aiEstimate: null,        // 成本闸门：AI token 预估缓存 { report, analyze, classify, threshold }
   aiEstimateKey: null,     // 成本闸门：当前 aiEstimate 对应的缓存键（category|prompt 指纹），用于按分析项失效缓存
   costGate: null,          // 成本闸门：强制确认弹窗载荷 { action, estimate, threshold }（非 null 即弹窗）
+  preflight: null,         // CX-09 预检确认弹窗载荷 { result, payload }（非 null 即弹窗）
+  preflightBusy: false,    // 预检请求进行中（防重复点击）
   // 比对任务的实时进度（后端异步，前端轮询）：{ status, progress, phase, message } 或 null
   jobProgress: null,
   compareStartedAt: null,  // RUNNING 起始时刻（用于比对超时提醒）
+  sameInputCompare: false, // 左右输入归一后是否为同一路径（结果为空时给「同一输入」而非「完全一致」的准确提示）
   compareStalled: false,   // RUNNING 持继超过阈值仍未结束
   stallNotified: false,    // 超时提醒已弹（仅一次），避免重复打扰
   activeCompareId: null,   // 当前正在轮询的比对 jobId；变化即视为中止旧轮询（支持重开/取消）
@@ -86,6 +169,15 @@ export const state = reactive({
   reportCategory: null,   // 最近一次生成报告所用的分析项（ReportPreview「重新生成」沿用；null=基础报告/默认整体分析）
   previewMd: null,        // 控制台「预览报告」临时报告正文（与全局 reportMd 解耦，避免互相覆盖）
   previewOpen: false,
+  // T06218 文件级审阅：服务端 reviews/{jobId}.json 为真源，state.review 只保留当前 job；
+  // reviewSummary 由本地纯函数即时重算，保证标记后状态栏/树/文件栏同帧更新（AC-10）。
+  review: emptyReviewDoc(),
+  reviewSummary: summarizeReview({}),
+  reviewAdvanceTick: 0, // T06220：当前文件由“非已审”变“已审”时自增，树侧据此自动跳下一未审
+  reviewLoading: false,
+  reviewError: '',
+  reviewSaveState: 'idle', // idle | pending | saving | saved | error
+  reviewMigration: null,   // { status:'migrated'|'failed'|'recovered', message }
   updateAvailable: null,  // R9 启动更新检查：发现新版本时 { tag, url, message }（不自动安装）
   error: null,
   toast: null,
@@ -112,27 +204,436 @@ export function toast(type, text, ms = 3200) {
   toastTimer = setTimeout(() => { state.toast = null }, ms)
 }
 
-// 主题三态（FR-004）：'light' | 'dark' | 'system'（跟随系统）。
-// data-bs-theme 只接受实际两态，'system' 需按 matchMedia 解析——
+// ---------------- T06218 文件级审阅状态 ----------------
+// 真源：后端 ~/.bempdiff/reviews/{jobId}.json；localStorage 只做「断网/重启 window 缓存」和旧数据迁移。
+// 更新路径：UI 同步改 state.review/reviewSummary（100ms 内树/状态栏同帧），80ms 防抖后异步落盘。
+const LEGACY_REVIEW_KEY = 'bempdiff.reviewed'
+const REVIEW_CACHE_PREFIX = 'bempdiff.review.cache.'
+let reviewSaveTimer = null
+let reviewLoadSeq = 0
+
+export function reviewFileInfo(key) {
+  const f = state.review && state.review.files ? state.review.files[key] : null
+  return f || null
+}
+
+export function reviewStatusOf(key) {
+  const f = reviewFileInfo(key)
+  return f ? f.status : 'unreviewed'
+}
+
+export function hasReviewBadge(key) {
+  const f = reviewFileInfo(key)
+  return !!(f && (f.manualOverride || f.status === 'in_progress' || f.status === 'reviewed' || f.status === 'needs_review'))
+}
+
+function reviewCacheKey(jobId) {
+  return REVIEW_CACHE_PREFIX + jobId
+}
+
+function readReviewCache(jobId) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(reviewCacheKey(jobId)) || 'null')
+    return raw && raw.files ? normalizeReviewDoc(raw, jobId) : null
+  } catch (_) { return null }
+}
+
+function writeReviewCache(doc) {
+  try {
+    if (!doc || !doc.jobId) return
+    localStorage.setItem(reviewCacheKey(doc.jobId), JSON.stringify(doc))
+  } catch (_) { /* 配额/隐私模式失败不影响服务端真源 */ }
+}
+
+function readLegacyJob(jobId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(LEGACY_REVIEW_KEY) || '{}')
+    return all && all[jobId] ? all[jobId] : null
+  } catch (_) { return null }
+}
+
+function dropLegacyJob(jobId) {
+  try {
+    const all = JSON.parse(localStorage.getItem(LEGACY_REVIEW_KEY) || '{}')
+    if (!all || !all[jobId]) return
+    delete all[jobId]
+    if (Object.keys(all).length) localStorage.setItem(LEGACY_REVIEW_KEY, JSON.stringify(all))
+    else localStorage.removeItem(LEGACY_REVIEW_KEY)
+  } catch (_) { /* 旧 key 清理失败不阻塞 */ }
+}
+
+function applyReviewDoc(doc) {
+  state.review = normalizeReviewDoc(doc, doc && doc.jobId)
+  state.reviewSummary = summarizeReview(state.review.files)
+  syncInsightsReview()
+  return state.review
+}
+
+/** 标记/覆盖文件审阅状态：本地即时生效，随后 80ms 防抖落盘（AC-10）。 */
+export function updateReviewFileState(key, patch) {
+  if (!key) return null
+  const before = state.review && state.review.files ? state.review.files[key] : null
+  const next = updateReviewFile(state.review, key, patch)
+  state.review = next
+  state.reviewSummary = summarizeReview(next.files)
+  syncInsightsReview()
+  const after = next.files[key]
+  // 只对“当前打开文件从未审/进行中/需复核 → 已审”自增一次；撤销已审不会误触发。
+  if (key === state.activeKey && after && after.status === REVIEW_STATUS.REVIEWED &&
+      (!before || before.status !== REVIEW_STATUS.REVIEWED)) {
+    state.reviewAdvanceTick = (state.reviewAdvanceTick || 0) + 1
+  }
+  state.reviewSaveState = 'pending'
+  writeReviewCache(next)
+  scheduleReviewSave()
+  return next.files[key] || null
+}
+
+// ---------------- T06221 备注 / 书签 ----------------
+// 备注与书签都挂在 files[key] 下，复用 T06218 的 80ms 防抖落盘与 localStorage 缓存；
+// 不改文件状态时不会触发 reviewAdvanceTick（自动跳转只认「已审」状态变化）。
+let reviewNoteSeq = 0
+function reviewerName() {
+  return (state.review && state.review.user) || 'local'
+}
+function nextNoteId() {
+  reviewNoteSeq = (reviewNoteSeq + 1) % 100000
+  return 'note-' + Date.now().toString(36) + '-' + reviewNoteSeq.toString(36)
+}
+
+export function reviewNotesOf(key) {
+  const f = reviewFileInfo(key)
+  return normalizeFileNotes(f && f.notes)
+}
+
+export function reviewBookmarksOf(key) {
+  const f = reviewFileInfo(key)
+  return normalizeFileBookmarks(f && f.bookmarks)
+}
+
+/** 新增/编辑备注。payload 需含 target（含 scope/hunkId/line/快照），编辑时传 id/createdAt。 */
+export function saveReviewNote(key, payload = {}) {
+  if (!key) return { ok: false, errorKey: 'rv.note.empty' }
+  const check = validateReviewNote(payload.text)
+  if (!check.ok) return check
+  const target = payload.target || {}
+  const existing = payload.id
+    ? reviewNotesOf(key).find(n => n.id === payload.id)
+    : null
+  const note = normalizeReviewNote({
+    ...target,
+    id: payload.id || nextNoteId(),
+    text: check.text,
+    tag: payload.tag,
+    user: reviewerName(),
+    createdAt: (existing && existing.createdAt) || new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  })
+  if (!note) return { ok: false, errorKey: 'rv.note.empty', text: check.text, length: check.length }
+  const notes = upsertReviewNote(reviewFileInfo(key), note)
+  updateReviewFileState(key, { notes })
+  return { ok: true, note, notes }
+}
+
+export function deleteReviewNote(key, id) {
+  if (!key || !id) return { ok: false }
+  const notes = removeReviewNote(reviewFileInfo(key), id)
+  updateReviewFileState(key, { notes })
+  return { ok: true, notes }
+}
+
+/** 一键书签：同一目标再次点击即取消。target 需含 scope/hunkId/line/快照。 */
+export function toggleReviewBookmarkState(key, target = {}) {
+  if (!key) return { ok: false, active: false }
+  const file = reviewFileInfo(key) || {}
+  const res = toggleReviewBookmark(file, target, reviewerName())
+  updateReviewFileState(key, { bookmarks: res.bookmarks })
+  return { ok: true, ...res }
+}
+
+export function isReviewBookmarked(key, target = {}) {
+  const tKey = target.targetKey || noteTargetKey(target.scope, target)
+  return reviewBookmarksOf(key).some(b => b.targetKey === tKey)
+}
+
+function scheduleReviewSave(delay = 80) {
+  if (!state.review || !state.review.jobId) return
+  if (reviewSaveTimer) clearTimeout(reviewSaveTimer)
+  reviewSaveTimer = setTimeout(() => {
+    reviewSaveTimer = null
+    flushReview().catch(() => {})
+  }, delay)
+}
+
+/** 立即落盘（切文件/页面隐藏/退出前调用）。keepalive=true 供 beforeunload 尽力送达。 */
+export async function flushReview(opts = {}) {
+  if (reviewSaveTimer) { clearTimeout(reviewSaveTimer); reviewSaveTimer = null }
+  const doc = state.review
+  const jobId = doc && doc.jobId
+  if (!jobId) return
+  state.reviewSaveState = 'saving'
+  try {
+    const resp = await api.putReview(jobId, doc, opts)
+    if (resp && resp.files && state.review.jobId === jobId) {
+      state.review = normalizeReviewDoc(resp, jobId)
+      state.reviewSummary = summarizeReview(state.review.files)
+      writeReviewCache(state.review)
+    }
+    state.reviewSaveState = 'saved'
+    state.reviewError = ''
+  } catch (e) {
+    state.reviewSaveState = 'error'
+    state.reviewError = e.message || String(e)
+    throw e
+  }
+}
+
+/** 同一 job 的并发加载共享一个 Promise，避免恢复会话时重复迁移/重复 toast（迁移只应发生一次）。 */
+const reviewLoads = new Map()
+
+export function loadReviewForJob(jobId) {
+  if (!jobId) return Promise.resolve()
+  const existing = reviewLoads.get(jobId)
+  if (existing) return existing
+  const p = doLoadReviewForJob(jobId).finally(() => {
+    if (reviewLoads.get(jobId) === p) reviewLoads.delete(jobId)
+  })
+  reviewLoads.set(jobId, p)
+  return p
+}
+
+/** 读取当前 job 审阅文档：服务端 → window 缓存 → 旧 localStorage 迁移。 */
+async function doLoadReviewForJob(jobId) {
+  const seq = ++reviewLoadSeq
+  state.reviewLoading = true
+  state.reviewError = ''
+  state.reviewMigration = null
+  const empty = emptyReviewDoc(jobId)
+  applyReviewDoc(empty)
+  try {
+    const server = await api.getReview(jobId, {})
+    if (seq !== reviewLoadSeq) return
+    if (server && server.exists) {
+      applyReviewDoc(server)
+      state.reviewSaveState = 'saved'
+      writeReviewCache(state.review)
+      return
+    }
+    // 服务端无文件：先看本 window 缓存（例如上次退出前 80ms 防抖未落盘），再尝试旧 localStorage 迁移。
+    const cached = readReviewCache(jobId)
+    if (cached && Object.keys(cached.files).length) {
+      applyReviewDoc(cached)
+      state.reviewMigration = { status: 'recovered', message: '已从本地缓存恢复审阅记录' }
+      scheduleReviewSave(0)
+      return
+    }
+    const legacyJob = readLegacyJob(jobId)
+    const migrated = migrateLegacyReviews(legacyJob, jobId, state.review.user)
+    if (!migrated) return
+    applyReviewDoc(migrated)
+    try {
+      const saved = await api.putReview(jobId, migrated)
+      if (seq === reviewLoadSeq) {
+        applyReviewDoc(saved)
+        state.reviewSaveState = 'saved'
+        writeReviewCache(state.review)
+      }
+      dropLegacyJob(jobId)
+      state.reviewMigration = { status: 'migrated', message: '旧版行级标记已迁移到文件级审阅' }
+      toast('success', '已将旧版行级审阅标记迁移到文件级审阅记录')
+    } catch (e) {
+      // PRD 要求失败保留旧数据并提示；不回滚本地已展示的迁移结果，避免用户看不懂「标记消失」。
+      state.reviewMigration = { status: 'failed', message: e.message || String(e) }
+      state.reviewError = e.message || String(e)
+      toast('warning', '旧审阅标记迁移失败，旧数据已保留：' + (e.message || e))
+    }
+  } catch (e) {
+    if (seq !== reviewLoadSeq) return
+    const cached = readReviewCache(jobId)
+    if (cached) {
+      applyReviewDoc(cached)
+      state.reviewMigration = { status: 'recovered', message: '后端不可用，已从本地缓存恢复' }
+    } else {
+      applyReviewDoc(empty)
+    }
+    state.reviewError = e.message || String(e)
+    state.reviewSaveState = 'error'
+  } finally {
+    if (seq === reviewLoadSeq) state.reviewLoading = false
+  }
+}
+
+export function resetReview() {
+  if (reviewSaveTimer) { clearTimeout(reviewSaveTimer); reviewSaveTimer = null }
+  reviewLoadSeq++
+  reviewLoads.clear()
+  applyReviewDoc(emptyReviewDoc())
+  state.reviewLoading = false
+  state.reviewError = ''
+  state.reviewSaveState = 'idle'
+  state.reviewMigration = null
+}
+
+// ---------------- T06225/27/28 洞察聚合 ----------------
+let insightsSeq = 0
+
+/** 清空洞察（新比对/关闭会话时调用，避免旧 job 的兼容/影响数据串到新树）。 */
+export function resetInsights() {
+  insightsSeq++
+  state.insights = null
+  state.insightsLoading = false
+  state.insightsError = ''
+}
+
+/** 拉取后端结构化洞察；同一 job 多次调用由 seq 丢弃旧响应。 */
+export async function loadInsights(jobId = currentJobId(), opts = {}) {
+  if (!jobId) return null
+  const seq = ++insightsSeq
+  state.insightsLoading = true
+  state.insightsError = ''
+  try {
+    const data = await api.jobInsights(jobId, { offset: 0, limit: opts.limit || 300 })
+    if (seq !== insightsSeq) return null
+    state.insights = data
+    syncInsightsReview(false)
+    syncHistoryMeta()
+    return data
+  } catch (e) {
+    if (seq !== insightsSeq) return null
+    state.insightsError = e.message || String(e)
+    return null
+  } finally {
+    if (seq === insightsSeq) state.insightsLoading = false
+  }
+}
+
+/** 审阅标记后本地刷新洞察里的审阅/证据计数（不重新请求后端，保证同帧）。 */
+function syncInsightsReview(updateHistory = true) {
+  const ins = state.insights
+  const sum = state.reviewSummary
+  if (!ins || !sum) return
+  const total = Math.max(Number(ins.reviewSummary && ins.reviewSummary.total) || 0, Number(sum.totalFiles) || 0)
+  let notes = 0
+  let bookmarks = 0
+  const files = (state.review && state.review.files) || {}
+  for (const f of Object.values(files)) {
+    notes += Array.isArray(f.notes) ? f.notes.length : 0
+    bookmarks += Array.isArray(f.bookmarks) ? f.bookmarks.length : 0
+  }
+  ins.reviewSummary = {
+    ...(ins.reviewSummary || {}),
+    total,
+    reviewed: sum.reviewedFiles || 0,
+    inProgress: sum.inProgressFiles || 0,
+    needsReview: sum.needsReviewFiles || 0,
+    unreviewed: sum.unreviewedFiles || 0,
+    notes,
+    bookmarks,
+    filePercent: total > 0 ? Math.round((sum.reviewedFiles || 0) * 100 / total) : 0
+  }
+  if (updateHistory) syncHistoryMeta()
+}
+
+/** 把当前 job 的统计/审阅进度回填到最近比对（Launchpad 不打开后端也能看到准确摘要）。 */
+function syncHistoryMeta() {
+  const job = state.job
+  if (!job || !job.jobId) return
+  const list = loadCompareHistory()
+  const item = list.find(x => x.jobId === job.jobId) ||
+    list.find(x => normalizeComparePath(x.oldPath) === normalizeComparePath(state.oldPath) &&
+      normalizeComparePath(x.newPath) === normalizeComparePath(state.newPath))
+  if (!item) return
+  item.jobId = job.jobId
+  if (job.stats) item.stats = { added: job.stats.added, deleted: job.stats.deleted, modified: job.stats.modified }
+  const ins = state.insights
+  if (ins && ins.impact) {
+    item.risk = {
+      high: (Number(ins.impact.critical) || 0) + (Number(ins.impact.high) || 0),
+      breaking: Number(ins.summary && ins.summary.breaking) || 0
+    }
+  }
+  const rs = (ins && ins.reviewSummary) || null
+  if (rs && Number(rs.total) > 0) {
+    item.review = {
+      percent: Number(rs.filePercent) || 0,
+      reviewed: Number(rs.reviewed) || 0,
+      total: Number(rs.total) || 0
+    }
+  } else if (state.reviewSummary) {
+    item.review = {
+      percent: state.reviewSummary.filePercent || 0,
+      reviewed: state.reviewSummary.reviewedFiles || 0,
+      total: state.reviewSummary.totalFiles || 0
+    }
+  }
+  saveCompareHistory()
+}
+
+/** 洞察条目跳转：打开文件并请求 DiffView 滚到第一个/指定 Hunk。 */
+export async function jumpToHunk(key, hunkIndex = 0) {
+  if (!key || !state.job) return false
+  await selectEntry(key)
+  state.hunkJump = { key, hunkIndex: Math.max(0, Number(hunkIndex) || 0), seq: Date.now() + Math.random() }
+  return true
+}
+
+// 页面隐藏/关闭前尽力落盘：80ms 防抖窗口内的最后一次标记不丢（AC 持久化）。
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    if (!state.review || !state.review.jobId || !reviewSaveTimer) return
+    flushReview({ keepalive: true }).catch(() => {})
+  })
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && state.reviewSaveState === 'pending') flushReview().catch(() => {})
+  })
+}
+
+// 主题六态（FR-004 / TH-02）：light | dark | midnight | paper | contrast | system。
+// Bootstrap 只接受实际明暗两态，六主题按 THEME_BOOT_MODE 映射；Token 主题保留完整语义名。
 // 持久化保存用户原始选择，解析结果实时反映；系统切换时无刷新跟随。
 const THEME_KEY = 'bempdiff-theme'
-const THEME_ORDER = ['light', 'dark', 'system']
+const THEME_ORDER = [...THEME_NAMES]
+initTokenRegistry()
 const themeMedia = (typeof window !== 'undefined' && window.matchMedia)
   ? window.matchMedia('(prefers-color-scheme: dark)') : null
 
-/** 把偏好值解析为实际主题：'system' 依赖系统亮暗，其余原样。 */
+/** 把偏好值解析为 Bootstrap 明暗底座：'system' 依赖系统亮暗，六主题按映射表归一。 */
 export function resolveTheme(pref) {
-  if (pref !== 'system') return pref
-  return (themeMedia && themeMedia.matches) ? 'dark' : 'light'
+  const token = resolveTokenTheme(pref, !!(themeMedia && themeMedia.matches))
+  return resolveBootstrapMode(token)
+}
+
+/** 把六主题偏好解析为 Token 主题名（供 UI 显示 system 的实际落点）。 */
+export function resolveThemeToken(pref) {
+  return resolveTokenTheme(pref, !!(themeMedia && themeMedia.matches))
+}
+
+/** 只落 DOM/Token，不写偏好；供 system 系统变化时无刷新重绘。 */
+function paintTheme(pref) {
+  const tokenTheme = resolveTokenTheme(pref, !!(themeMedia && themeMedia.matches))
+  const mode = resolveBootstrapMode(tokenTheme)
+  const tokens = THEMES[tokenTheme] || THEMES.light
+  document.documentElement.setAttribute('data-bs-theme', mode)
+  document.documentElement.setAttribute('data-theme', tokenTheme)
+  applyTokenTheme(pref, mode === 'dark')
+  document.documentElement.style.colorScheme = mode
+  // 背景/前景取 Token canvas/text，午夜/护眼/高对比不再被 Bootstrap 两态底色覆盖。
+  document.documentElement.style.backgroundColor = tokens.canvas
+  document.documentElement.style.color = tokens.text
+  return { tokenTheme, mode }
 }
 
 export function applyTheme(t) {
-  state.theme = t
-  localStorage.setItem(THEME_KEY, t)
-  document.documentElement.setAttribute('data-bs-theme', resolveTheme(t))
+  const pref = THEME_NAMES.includes(t) ? t : 'light'
+  const started = (typeof performance !== 'undefined' && performance.now) ? performance.now() : 0
+  state.theme = pref
+  try { localStorage.setItem(THEME_KEY, pref) } catch (_) { /* 存储不可用时仅当前会话生效 */ }
+  const painted = paintTheme(pref)
+  if (started) state.lastThemeSwitchMs = Number((performance.now() - started).toFixed(1))
+  return painted
 }
 
-/** 循环切换 亮 → 暗 → 跟随系统 → 亮（工具栏单按钮三态）。 */
+/** 循环切换 亮 → 暗 → 午夜 → 护眼 → 高对比 → 跟随系统 → 亮（工具栏单按钮六态）。 */
 export function cycleTheme() {
   const i = THEME_ORDER.indexOf(state.theme)
   applyTheme(THEME_ORDER[(i + 1) % THEME_ORDER.length])
@@ -141,6 +642,20 @@ export function cycleTheme() {
   const mode = resolveTheme(state.theme) === 'dark'
   const cur = hlThemeOf(state.hlTheme)
   if (cur.dark !== mode) setHlTheme(mode ? 'github-dark' : 'default')
+}
+
+// ---------------- TH-03 色盲安全调色板 ----------------
+const DIFF_PALETTE_KEY = 'bempdiff.diffPalette'
+export const DIFF_PALETTES = {
+  default: { labelKey: 'cfg.diffPalette.default' },
+  colorblind: { labelKey: 'cfg.diffPalette.colorblind' }
+}
+/** 设置差异调色板（default | colorblind）；非法值静默回退 default 并持久化。 */
+export function setDiffPalette(key) {
+  const k = key === 'colorblind' ? 'colorblind' : 'default'
+  state.diffPalette = k
+  try { localStorage.setItem(DIFF_PALETTE_KEY, k) } catch (_) { /* 存储不可用时仅当前会话生效 */ }
+  return k
 }
 
 // ---------------- FR-014 语法高亮主题包 ----------------
@@ -168,7 +683,10 @@ export async function init() {
   // 只在 system 偏好下监听也需覆盖「切换到 system 之后」的场景，故常驻监听、回调内部判偏好。
   if (themeMedia && typeof themeMedia.addEventListener === 'function') {
     themeMedia.addEventListener('change', () => {
-      if (state.theme === 'system') document.documentElement.setAttribute('data-bs-theme', resolveTheme('system'))
+      if (state.theme === 'system') {
+        // 六主题复用同一落 DOM 路径：system 按 OS 亮暗重绘 Token + Bootstrap 底座，无刷新。
+        paintTheme('system')
+      }
     })
   }
   state.ignoreRules = loadIgnoreRules() // 右键菜单「忽略」规则：跨会话持久化
@@ -182,6 +700,92 @@ export async function init() {
   if (typeof window !== 'undefined' && window.bempdiff && typeof window.bempdiff.onShellCompare === 'function') {
     window.bempdiff.onShellCompare((paths) => { ingestShellPaths(paths) })
   }
+  // UI-06/REQ-005：恢复上次已完成的比对会话（Tabs/Pin/激活页）。
+  // 异步执行且失败静默——恢复失败绝不能阻塞启动；只有后端仍持有该 job 时才恢复，避免展示过期树。
+  restoreLastSession().catch(() => {})
+}
+
+// ---------------- UI-06 Tab 布局持久化 ----------------
+// 仅保存「已完成的比对会话」：jobId + tab 元数据（key/pinned/node）+ 激活键。
+// 不保存源码/差异内容/AI 结果，沿用 Key 与内容不落盘原则。
+const TAB_LAYOUT_KEY = 'bempdiff.tabLayout'
+const TAB_LAYOUT_VERSION = 1
+const TAB_LAYOUT_MAX = 20
+
+function currentJobId() {
+  return (state.job && state.job.jobId) || state.activeCompareId || null
+}
+
+/** 保存当前 tab 布局；无已完成 job 或空 tabs 时跳过（避免覆盖上一份可恢复会话）。 */
+export function saveTabLayout() {
+  try {
+    const jobId = currentJobId()
+    if (!jobId || !state.tabs.length) return
+    const layout = {
+      v: TAB_LAYOUT_VERSION,
+      jobId,
+      activeKey: state.activeKey,
+      savedAt: Date.now(),
+      oldPath: state.oldPath || '',
+      newPath: state.newPath || '',
+      leftType: state.leftType || 'package',
+      tabs: state.tabs.slice(0, TAB_LAYOUT_MAX).map(t => ({
+        key: t.key,
+        pinned: !!t.pinned,
+        scroll: Math.max(0, Number(t.scroll) || 0),
+        node: t.node || null
+      }))
+    }
+    localStorage.setItem(TAB_LAYOUT_KEY, JSON.stringify(layout))
+  } catch (_) { /* 存储满/禁用时静默放弃布局恢复 */ }
+}
+
+/** 读取布局快照；坏数据/版本不符返回 null。 */
+export function loadTabLayout() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(TAB_LAYOUT_KEY) || 'null')
+    if (!raw || raw.v !== TAB_LAYOUT_VERSION || !raw.jobId || !Array.isArray(raw.tabs)) return null
+    return raw
+  } catch (_) { return null }
+}
+
+/** 启动恢复：后端 job 仍为 DONE 时恢复 tabs/pin；失败或 job 已消失则清掉快照。 */
+export async function restoreLastSession() {
+  if (state.busy || state.job) return false // 用户已发起新比对/已有结果时不抢状态
+  const layout = loadTabLayout()
+  if (!layout) return false
+  try {
+    const status = await api.jobStatus(layout.jobId)
+    if (!status || status.status !== 'DONE' || !status.tree) {
+      localStorage.removeItem(TAB_LAYOUT_KEY)
+      return false
+    }
+    state.job = status
+    state.activeCompareId = layout.jobId
+    state.oldPath = layout.oldPath || state.oldPath
+    state.newPath = layout.newPath || state.newPath
+    state.leftType = layout.leftType === 'folder' ? 'folder' : 'package'
+    state.jobProgress = { status: 'DONE', progress: 100, phase: 'done', message: '已恢复上次会话' }
+    await loadReviewForJob(layout.jobId)
+    loadInsights(layout.jobId).catch(() => {})
+    state.tabs = layout.tabs
+      .filter(t => t && typeof t.key === 'string' && t.node)
+      .map(t => ({ key: t.key, node: t.node, pinned: !!t.pinned, scroll: Math.max(0, Number(t.scroll) || 0), busy: false, decompile: null }))
+    const validKeys = new Set(state.tabs.map(t => t.key))
+    state.activeKey = validKeys.has(layout.activeKey) ? layout.activeKey : (state.tabs[0] ? state.tabs[0].key : null)
+    const active = state.tabs.find(t => t.key === state.activeKey)
+    if (active) ensureTabLoaded(active.key, active.node).catch(() => {})
+    return state.tabs.length > 0
+  } catch (_) {
+    // 后端已重启/缓存被清理时 jobStatus 会 404；删除过期快照，启动继续走空态
+    try { localStorage.removeItem(TAB_LAYOUT_KEY) } catch (_) {}
+    return false
+  }
+}
+
+/** 清除布局快照（用户主动关闭全部 tab / 新比对开始前）。 */
+export function clearTabLayout() {
+  try { localStorage.removeItem(TAB_LAYOUT_KEY) } catch (_) {}
 }
 
 export function defaultConfig() {
@@ -235,7 +839,8 @@ export function setFocusMode(v) { state.focusMode = !!v }
 // 智能分析栏（.col-ai）收起/展开：与 DiffView 文件栏一键显隐联动，避免遮挡对比窗口。
 // 用户显式切换时写入 localStorage，作为后续响应式避让（窄屏自动收起）的覆盖优先级。
 const AI_COLLAPSE_KEY = 'bempdiff.analysisCollapsed'
-const AI_AUTO_COLLAPSE_W = 1080
+const AI_AUTO_COLLAPSE_W_LEGACY = 1080
+const AI_AUTO_COLLAPSE_W_COCKPIT = 1280
 export function setAiPanelCollapsed(v) {
   state.aiPanelCollapsed = !!v
   localStorage.setItem(AI_COLLAPSE_KEY, String(state.aiPanelCollapsed))
@@ -244,13 +849,41 @@ export function toggleAiPanel() { setAiPanelCollapsed(!state.aiPanelCollapsed) }
 // 差异文件树栏（.col-tree）收起/展开：手动切换，不做窄屏自动避让（树栏无自动收起需求）。
 export function setTreePanelCollapsed(v) { state.treePanelCollapsed = !!v }
 export function toggleTreePanel() { setTreePanelCollapsed(!state.treePanelCollapsed) }
+// T06219 <1080 单栏+抽屉：左右栏不占布局宽度，按需以覆盖层打开。
+// 这两个开关是会话态，不写 localStorage；>1080 时由 CSS 忽略，不改变桌面三栏偏好。
+export function toggleMobileTree() {
+  state.mobileTreeOpen = !state.mobileTreeOpen
+  if (state.mobileTreeOpen) state.treePanelCollapsed = false
+}
+export function toggleMobileAi() {
+  const opening = state.aiPanelCollapsed || !state.mobileAiOpen
+  state.mobileAiOpen = opening
+  state.aiPanelCollapsed = !opening
+}
 // 响应式避让：有显式偏好（localStorage）则尊重之；否则按视口宽度自动收起（窄屏不挤占 diff）。
+// PRD 8.1：新版 1080–1280 右栏默认收起；1280 仍保留三栏（1280–1440 右栏 320px）。
 export function applyAiPanelResponsive() {
   const pref = localStorage.getItem(AI_COLLAPSE_KEY)
-  state.aiPanelCollapsed = pref !== null ? pref === 'true' : window.innerWidth <= AI_AUTO_COLLAPSE_W
+  if (pref !== null) { state.aiPanelCollapsed = pref === 'true'; return }
+  const threshold = state.reviewCockpit ? AI_AUTO_COLLAPSE_W_COCKPIT : AI_AUTO_COLLAPSE_W_LEGACY
+  state.aiPanelCollapsed = state.reviewCockpit
+    ? window.innerWidth < threshold
+    : window.innerWidth <= threshold
+}
+
+/** 比对路径归一化（仅用于判断左右是否同一输入）：统一斜杠、去尾斜杠、Windows 下忽略大小写。 */
+export function normalizeComparePath(p) {
+  let s = String(p || '').trim().replace(/\\/g, '/').replace(/\/+/g, '/').replace(/\/+$/, '')
+  if (/^[a-zA-Z]:/.test(s)) s = s.toLowerCase()
+  return s
 }
 
 export async function runCompare({ leftType, leftPath, rightPath, options }) {
+  // P2-5：判断两侧是否指向同一路径（Windows 大小写/斜杠/尾斜杠归一）。
+  // 同一输入的 0 差异不等于「两个包完全一致」，结果区需要给出准确说明。
+  state.sameInputCompare = normalizeComparePath(leftPath) === normalizeComparePath(rightPath)
+  resetReview()             // 新 job：旧审阅文档立即让位，避免旧进度串到新结果
+  resetInsights()           // 新 job：旧兼容/影响数据不得串到新树
   state.busy = true
   state.busyText = '正在提交比对任务…'
   state.error = null
@@ -278,6 +911,8 @@ export async function runCompare({ leftType, leftPath, rightPath, options }) {
     const final = await pollJob(jobId)
     if (!final) return true // 已取消 / 被新比对取代 → 不清空旧结果，直接返回（作业确实提交成功过）
     state.job = final
+    await loadReviewForJob(jobId)
+    await loadInsights(jobId)
     // 重新比对：中止并清空旧 AI 分析任务（旧任务与旧树/旧 job 不再对应，避免残留任务对新 job 误跑）
     for (const t of state.aiTasks) { const c = aiControllers.get(t.id); if (c) c.abort() }
     aiControllers.clear()
@@ -305,6 +940,7 @@ export async function runCompare({ leftType, leftPath, rightPath, options }) {
     // 本次结果），原因留在 state.error，由差异树空态与状态栏长期显示；前缀只在此处加一次。
     state.error = e.message || String(e)
     state.job = null
+    resetInsights()
     state.tabs = []
     state.activeKey = null
     state.reportMd = null
@@ -350,24 +986,54 @@ export function buildOptions() {
   }
 }
 
-/** 工具栏「开始比对」按钮与拖拽/右键菜单共用入口。 */
-export function triggerCompare() {
-  if (!state.oldPath || !state.newPath) {
+/** 工具栏「开始比对」按钮与拖拽/右键菜单共用入口。
+ *  CX-09：默认先走只读预检；阻断项直接弹确认框（继续按钮禁用），警告项允许“仍然继续”。
+ *  `skipPreflight` 仅供预检弹窗“继续”复用同一 payload 时使用，避免用户点一次比对却预检两次。 */
+export async function triggerCompare(opts = {}) {
+  const payload = (opts && opts.payload) ? opts.payload : {
+    leftType: state.leftType,
+    leftPath: (state.oldPath || '').trim(),
+    rightPath: (state.newPath || '').trim(),
+    options: buildOptions()
+  }
+  if (!payload.leftPath || !payload.rightPath) {
     toast('warning', '请先填写老包与新包（或目录）的路径')
-    return
+    return false
+  }
+  if (!opts.skipPreflight) {
+    state.preflightBusy = true
+    try {
+      const pf = await api.preflight(payload)
+      // info 级不打扰用户；block/warn 进入确认弹窗
+      if (pf && (pf.level === 'block' || pf.level === 'warn')) {
+        state.preflight = { result: pf, payload }
+        return false
+      }
+    } catch (e) {
+      // 预检服务不可用时退化为“提示后继续”，不让预检自身阻塞主流程
+      toast('warning', '比对预检不可用，已直接继续：' + e.message)
+    } finally {
+      state.preflightBusy = false
+    }
   }
   // R5（二期 T01463）：成功发起的比对会话记入历史（供跨启动恢复路径对）。
   // T03669 起按后端受理结果记录：路径不存在会被输入校验直接 400 拒绝，
   // 这种从未真正开始的比对不再进「最近比对」，免得列表本身成为「做过」的假证据。
-  runCompare({
-    leftType: state.leftType,
-    leftPath: state.oldPath.trim(),
-    rightPath: state.newPath.trim(),
-    options: buildOptions()
-  }).then((ok) => {
-    if (ok) pushCompareHistory(state.oldPath, state.newPath, state.leftType)
-  })
+  const ok = await runCompare(payload)
+  if (ok) pushCompareHistory(payload.leftPath, payload.rightPath, payload.leftType)
+  return ok
 }
+
+/** CX-09 弹窗「仍要继续」：复用已预检的 payload，跳过二次预检。 */
+export async function confirmPreflight() {
+  const pending = state.preflight
+  if (!pending) return false
+  state.preflight = null
+  return triggerCompare({ payload: pending.payload, skipPreflight: true })
+}
+
+/** CX-09 弹窗「取消」：仅关闭弹窗，不启动比对。 */
+export function cancelPreflight() { state.preflight = null }
 
 // ---------------- R5 比对会话历史（二期 T01463） ----------------
 // 仅记录路径元数据（左右路径 + 输入类型 + 时间）并持久化 localStorage（上限 20 条滚动）；
@@ -401,6 +1067,19 @@ export function pushCompareHistory(oldPath, newPath, leftType) {
     top.at = Date.now()
   } else {
     list.unshift({ oldPath: o, newPath: n, leftType: leftType || 'package', at: Date.now() })
+  }
+  // T06223：最近项携带 jobId/统计/审阅摘要，Launchpad 展示「文件数/高风险/已审」而不打开大包。
+  if (state.job && state.job.jobId) {
+    const rec = list[0]
+    rec.jobId = state.job.jobId
+    if (state.job.stats) rec.stats = { added: state.job.stats.added, deleted: state.job.stats.deleted, modified: state.job.stats.modified }
+    if (state.reviewSummary) {
+      rec.review = {
+        percent: state.reviewSummary.filePercent || 0,
+        reviewed: state.reviewSummary.reviewedFiles || 0,
+        total: state.reviewSummary.totalFiles || 0
+      }
+    }
   }
   state.compareHistory = list.slice(0, COMPARE_HISTORY_MAX)
   saveCompareHistory()
@@ -630,7 +1309,18 @@ export async function selectEntry(key) {
   const r = activateTabImpl(state.tabs, state.activeKey, key, node)
   state.tabs = r.tabs
   state.activeKey = r.activeKey
-  if (!r.opened) return
+  if (r.opened) await ensureTabLoaded(key, node)
+}
+
+/**
+ * UI-06 恢复会话：恢复出来的 tab 只有元数据（decompile=null），点击时必须按需反编译。
+ * 同一 key 已有在途请求时直接返回（inflightDecompile 去重）；已加载/不可反编译结果也返回。
+ */
+export async function ensureTabLoaded(key, node) {
+  const tab = state.tabs.find(x => x.key === key)
+  if (!tab || !state.job || tab.decompile || inflightDecompile.has(key)) return
+  tab.busy = true
+  tab.error = null
   // 取消上一次同一 key 的在途请求（重复点击 / 反复切换同一文件时去重）
   const prev = inflightDecompile.get(key)
   if (prev) prev.abort()
@@ -644,7 +1334,7 @@ export async function selectEntry(key) {
       t.decompile = dec
       t.busy = false
       if (!dec.ok) {
-        toast('warning', `「${node ? node.key : key}」无法反编译：${dec.error || dec.engine || 'unknown'}`)
+        toast('warning', `「${(node && node.key) || key}」无法反编译：${dec.error || dec.engine || 'unknown'}`)
       }
     }
   } catch (e) {
@@ -1021,11 +1711,16 @@ export function startAiAnalysis(category = 'risk', prompt = '', opts = {}) {
   const fileKey = opts.fileKey || null
   const fileStatus = opts.fileStatus || null
   const id = 'ai-' + (++aiTaskSeq)
-  const title = cat.key === 'custom'
-    ? t('ac.customTitle', { q: (prompt || '').slice(0, 18) })
-    : (fileKey ? t('ac.fileTitle', { name: fileSummaryLabel(fileKey) }) : t(cat.labelKey || 'cat.file'))
+  // P2-8：标题保存 titleKey + titleParams（而非当时语言的成品字符串），切换中英文后历史任务标题可重新求值。
+  const titleKey = cat.key === 'custom'
+    ? 'ac.customTitle'
+    : (fileKey ? 'ac.fileTitle' : (cat.labelKey || 'cat.file'))
+  const titleParams = cat.key === 'custom'
+    ? { q: (prompt || '').slice(0, 18) }
+    : (fileKey ? { name: fileSummaryLabel(fileKey) } : {})
+  const title = t(titleKey, titleParams)
   const task = {
-    id, category: cat.key, title, prompt: cat.key === 'custom' ? (prompt || '') : '',
+    id, category: cat.key, title, titleKey, titleParams, prompt: cat.key === 'custom' ? (prompt || '') : '',
     fileKey, fileStatus,
     status: 'thinking', thinking: [], answer: '', error: '', createdAt: Date.now(),
     alive: true,          // 任务存活令牌：中断/关闭后置 false；闸门等待窗口内被中断则不再启动流（评审 P0 #2）
@@ -1153,6 +1848,19 @@ export function closeReportPreview() {
 export function downloadExport(granularity = 'all') {
   // 兼容旧入口：一律走「小包同步 / 大包异步」的新机制；granularity 透传导出粒度（T02742）。
   return startExport(granularity)
+}
+
+/** T06230：导出差异清单 CSV（路径/状态/类型）。公式注入在 csv_export 内统一转义。 */
+export function downloadDiffCsv() {
+  const job = state.job
+  if (!job || !Array.isArray(job.tree) || !job.tree.length) {
+    toast('warning', t('mm.csvEmpty'))
+    return false
+  }
+  const csv = buildDiffCsv(job.tree)
+  const ok = downloadCsv(`bempdiff-diff-${job.jobId || 'job'}.csv`, csv)
+  if (ok) toast('success', t('mm.csvDone'))
+  return ok
 }
 
 /** 格式化字节为可读字符串。 */

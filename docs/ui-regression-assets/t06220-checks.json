@@ -1,0 +1,97 @@
+{
+  "task": "T06220 实现审阅树头部筛选",
+  "generatedAt": "2026-11-23T02:31:34+08:00",
+  "job": "job-431001",
+  "jobShape": { "files": 3, "dirs": 1, "rows": 30, "hunks": 2 },
+  "build": {
+    "modules": 89,
+    "indexHtml": "release/webui/dist/index.html (2640 bytes)",
+    "js": "assets/index-8qxtlNVU.js (561.38 kB, gzip 195.73 kB)",
+    "css": "assets/index-DF9HN9GE.css (75.39 kB, gzip 13.51 kB)"
+  },
+  "logicChecks": {
+    "check:review": { "passed": 6, "failed": 0 },
+    "check:review-tree": { "passed": 17, "failed": 0 }
+  },
+  "production1280": {
+    "initial": {
+      "stats": ["已审 0/3 0%", "高风险 0/0", "备注 0", "书签 0"],
+      "chips": ["全部 3|active", "未审 3", "进行中 0", "需复核 0", "已审 0", "高风险 0|disabled", "仅格式变化 0"],
+      "fileRows": 3,
+      "headWidth": { "client": 279, "scroll": 279, "height": 119 }
+    },
+    "filterUnreviewed": { "active": "未审", "fileRows": 3 },
+    "filterReviewedEmpty": { "active": "已审", "fileRows": 0, "dirs": 0, "emptyText": "当前过滤条件下没有匹配的条目" },
+    "collapsedParentBeforeMark": { "srcExpanded": false, "fileRows": 1, "dirRows": 1 },
+    "autoNextAfterMarkBar": {
+      "stats": ["已审 1/3 33%", "高风险 0/0", "备注 0", "书签 0"],
+      "srcExpanded": true,
+      "fileRows": 2,
+      "activeFile": "src/Foo.java",
+      "pathbar": "left/src/Foo.java",
+      "toast": "已跳到下一未审文件：src/Foo.java"
+    },
+    "autoNextDisabled": {
+      "localStorage.bempdiff.autoNextUnreviewed": "0",
+      "afterMarkFooPathbar": "left/src/Foo.java",
+      "toast": false,
+      "stats": ["已审 2/3 67%", "高风险 0/0", "备注 0", "书签 0"]
+    },
+    "queueView": {
+      "rows": ["README.md", "src/Bar.java", "src/Foo.java"],
+      "dirRows": 0,
+      "sortItemsDisabled": 3,
+      "stats": ["已审 2/3 67%", "高风险 0/0", "备注 0", "书签 0"]
+    },
+    "clearFilters": {
+      "search": "",
+      "activeChip": "全部",
+      "fileRows": 3,
+      "scrollBefore": 0,
+      "scrollAfter": 0,
+      "headWidth": { "client": 279, "scroll": 279, "height": 95 }
+    },
+    "persistAfterReload": {
+      "activeChip": "未审",
+      "stats": ["已审 2/3 67%", "高风险 0/0", "备注 0", "书签 0"],
+      "chipsStable": true
+    },
+    "breakpoints": {
+      "1440": { "treeW": 300, "headClient": 299, "headScroll": 299 },
+      "1200": { "treeW": 260, "headClient": 259, "headScroll": 259 }
+    }
+  },
+  "ac07DevInjection": {
+    "base": "http://localhost:5199/ + 4180 API proxy",
+    "aiClassify": {
+      "src/Foo.java": "HIGH",
+      "src/Bar.java": "LOW",
+      "README.md": "MEDIUM"
+    },
+    "before": ["已审 0/3 0%", "高风险 1/3"],
+    "filter": "未审 + 高风险",
+    "fileRows": ["src/Foo.java"],
+    "onlyOneFile": true,
+    "riskChipDisabled": false,
+    "autoNextState": {
+      "activeKey": "src/Foo.java",
+      "reviewAdvanceTick": 1,
+      "toast": "已跳到下一未审文件：src/Foo.java"
+    }
+  },
+  "screenshots": [
+    "docs/ui-regression-assets/t06220-1280-review-head.png",
+    "docs/ui-regression-assets/t06220-1280-auto-next.png",
+    "docs/ui-regression-assets/t06220-1280-queue.png",
+    "docs/ui-regression-assets/t06220-1280-persist.png",
+    "docs/ui-regression-assets/t06220-1440-review-head.png",
+    "docs/ui-regression-assets/t06220-1200-review-head.png",
+    "docs/ui-regression-assets/t06220-dev-ac07-highrisk.png"
+  ],
+  "boundaries": [
+    "备注/书签真实数据由 T06221 提供；本次审阅文档为空，UI 显示 0，仅用纯逻辑夹具验证 notes/bookmarks 计数为 1/3。",
+    "清除筛选后的滚动保持：3 文件夹具不足以产生可滚动高度，仅验证 scrollTop 未清零且代码不重置；大列表滚动保持留给 T06222。",
+    "高风险组合筛选用 Vite dev server 动态注入 state.aiClassify 验证；生产构建无 AI 数据时 chip 按设计禁用。",
+    "未 commit/reset/stash。"
+  ]
+}

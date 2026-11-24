@@ -4,8 +4,13 @@ import {
   state, selectEntry, toggleArchive, STATUS_META, statusLabel, toast,
   excludeEntry, restoreAllExcluded, addIgnoreRule, removeIgnoreRule, clearIgnoreRules,
   setBaseFolder, showProperties, hideProperties, startFileAiSummary,
-  setTreePanelCollapsed
+  setTreePanelCollapsed, reviewStatusOf, hasReviewBadge
 } from '../store'
+import { reviewStatusMeta } from '../lib/review'
+import {
+  normalizeReviewTreeFilter, reviewTreeStats, passesReviewTreeFilter, nextUnreviewedNode, isReviewableFile,
+  countFileNotes, countFileBookmarks
+} from '../lib/review_tree'
 import { isIgnored, IGNORE_TYPES } from '../lib/ignore'
 import { menuItemsFor, buildCopyText } from '../lib/tree_actions'
 import { t } from '../lib/i18n'
@@ -26,6 +31,87 @@ const LAYER_TITLE = {
 }
 
 const tree = computed(() => (state.job && state.job.tree) || [])
+
+// ===================== T06220 审阅头部筛选 =====================
+const REVIEW_FILTER_KEY = 'bempdiff.treeReviewFilter'
+const AUTO_NEXT_KEY = 'bempdiff.autoNextUnreviewed'
+function readJsonStored(key) {
+  try { return JSON.parse(localStorage.getItem(key) || 'null') } catch (_) { return null }
+}
+const reviewFilter = ref(normalizeReviewTreeFilter(readJsonStored(REVIEW_FILTER_KEY)))
+const autoNextUnreviewed = ref(localStorage.getItem(AUTO_NEXT_KEY) !== '0')
+watch(reviewFilter, (v) => {
+  try { localStorage.setItem(REVIEW_FILTER_KEY, JSON.stringify(normalizeReviewTreeFilter(v))) } catch (_) {}
+}, { deep: true })
+const reviewStats = computed(() => reviewTreeStats(tree.value, state.review, state.aiClassify))
+const formattedOnlyCount = computed(() => tree.value.filter(n => isReviewableFile(n) && n.formattedOnly === true).length)
+const hasAiClassification = computed(() => Object.keys(state.aiClassify || {}).length > 0)
+const REVIEW_CHIP_DEFS = [
+  { key: 'all', labelKey: 'dt.chip.all', countKey: 'totalFiles' },
+  { key: 'unreviewed', labelKey: 'rv.status.unreviewed', countKey: 'unreviewed' },
+  { key: 'in_progress', labelKey: 'dt.chip.inProgress', countKey: 'inProgress' },
+  { key: 'needs_review', labelKey: 'rv.status.needs_review', countKey: 'needsReview' },
+  { key: 'reviewed', labelKey: 'rv.status.reviewed', countKey: 'reviewed' }
+]
+const reviewChips = computed(() => REVIEW_CHIP_DEFS.map(c => ({
+  ...c, count: Number(reviewStats.value[c.countKey]) || 0
+})))
+
+function setReviewStatus(key) {
+  const cur = reviewFilter.value
+  if (key === 'all') {
+    reviewFilter.value = { ...cur, status: 'all', highRisk: false, onlyFormatted: false, onlyBookmarks: false }
+  } else {
+    reviewFilter.value = { ...cur, status: cur.status === key ? 'all' : key }
+  }
+}
+function toggleHighRisk() {
+  if (!hasAiClassification.value) {
+    toast('info', t('dt.chip.highRiskNeedAi'))
+    return
+  }
+  // 新 chip 与原风险按钮互斥：chip 只允许 HIGH；启用时把原风险栏恢复全选，避免交集为空。
+  const cfg = state.config || {}
+  cfg.filterRisk = ['HIGH', 'MEDIUM', 'LOW']
+  reviewFilter.value = { ...reviewFilter.value, highRisk: !reviewFilter.value.highRisk }
+}
+function toggleFormattedOnly() {
+  reviewFilter.value = { ...reviewFilter.value, onlyFormatted: !reviewFilter.value.onlyFormatted }
+}
+function toggleBookmarksOnly() {
+  reviewFilter.value = { ...reviewFilter.value, onlyBookmarks: !reviewFilter.value.onlyBookmarks }
+}
+function toggleAutoNext() {
+  autoNextUnreviewed.value = !autoNextUnreviewed.value
+  try { localStorage.setItem(AUTO_NEXT_KEY, autoNextUnreviewed.value ? '1' : '0') } catch (_) {}
+}
+function clearReviewFilters() {
+  reviewFilter.value = { status: 'all', highRisk: false, onlyFormatted: false, onlyBookmarks: false }
+}
+
+// T06218 树内审阅状态：只有 in_progress/reviewed/needs_review/手动覆盖才显示，避免 1000 行徽标噪声。
+function reviewLabelOf(key) {
+  return t(reviewStatusMeta(reviewStatusOf(key)).labelKey)
+}
+function reviewIconOf(key) {
+  return reviewStatusMeta(reviewStatusOf(key)).icon
+}
+function reviewColorOf(key) {
+  const s = reviewStatusOf(key)
+  if (s === 'reviewed') return 'var(--bs-success)'
+  if (s === 'in_progress') return 'var(--bs-warning)'
+  if (s === 'needs_review') return 'var(--bs-danger)'
+  return 'var(--bs-secondary-color)'
+}
+function noteCountOf(key) {
+  const f = state.review && state.review.files ? state.review.files[key] : null
+  return countFileNotes(f)
+}
+function bookmarkCountOf(key) {
+  const f = state.review && state.review.files ? state.review.files[key] : null
+  return countFileBookmarks(f)
+}
+
 // 树栏「过滤项计数」：直接用后端全量统计（state.job.stats，已含解包后的嵌套归档内部），
 // 与顶部全局汇总栏同一数据源，天然一致且准确。
 const counts = computed(() => {
@@ -88,10 +174,23 @@ function passViewFilter(n) {
   if (isIgnored(n.key, state.ignoreRules)) return false
   return true
 }
-function passesFilters(n) { return passStatusFilter(n) && passSearchFilter(n) && passRiskFilter(n) && passViewFilter(n) }
+function passReviewFilter(n) {
+  return passesReviewTreeFilter(n, reviewFilter.value, state.review, state.aiClassify)
+}
+// 当前文件刚变已审时仍需留在候选序列中，才能找到它后面的下一个未审。
+function passesBaseFilters(n) {
+  return passStatusFilter(n) && passSearchFilter(n) && passRiskFilter(n) && passViewFilter(n)
+}
+function passesFilters(n) { return passesBaseFilters(n) && passReviewFilter(n) }
+// 自动跳下一未审时，status 条件固定为“未审”由 nextUnreviewedNode 负责；其余高风险/仅格式仍需生效。
+function passesAutoNextFilters(n) {
+  return passesBaseFilters(n) &&
+    passesReviewTreeFilter(n, { ...reviewFilter.value, status: 'all' }, state.review, state.aiClassify)
+}
 
-/** 一键清空所有过滤（搜索/4 个状态/风险）：用户被「勾选过滤后整树消失」卡住时一键恢复。
- * 仅清运行时态（state.config），不修改持久化配置——避免覆盖用户此前在配置中心保存的偏好。 */
+/** 一键清空所有过滤（搜索/4 个状态/风险/审阅 chips）：用户被「勾选过滤后整树消失」卡住时一键恢复。
+ * 仅清运行时态（state.config），不修改持久化配置——避免覆盖用户此前在配置中心保存的偏好。
+ * T06220 起审阅筛选独立持久化在 localStorage，一并重置为「全部」。 */
 function clearAllFilters() {
   const cfg = state.config
   if (!cfg) return
@@ -101,13 +200,28 @@ function clearAllFilters() {
   cfg.filterShowAdded = true
   cfg.filterShowDeleted = true
   cfg.filterShowUnchanged = true
-  if (Array.isArray(cfg.filterRisk)) cfg.filterRisk = ['HIGH', 'MEDIUM', 'LOW']
-  else cfg.filterRisk = ['HIGH', 'MEDIUM', 'LOW']
+  cfg.filterRisk = ['HIGH', 'MEDIUM', 'LOW']
+  clearReviewFilters()
   toast('info', t('dt.filtersCleared'))
 }
 
 const filtered = computed(() => {
   return tree.value.filter(passesFilters)
+})
+
+// P2-5：判断本次比对是否真的存在差异（以全量 stats 为准，不受当前过滤条件影响）。
+// 目录/包完全一致时 tree 仍可能含“未变”条目，过滤掉未变后 filtered=[]；
+// 若只按 filtered 判空会误显示「过滤后无匹配」，掩盖「两侧一致」的结论。
+const jobHasDiff = computed(() => {
+  const s = state.job && state.job.stats
+  if (s) {
+    return (Number(s.added) || 0) + (Number(s.deleted) || 0) + (Number(s.modified) || 0) > 0
+  }
+  // stats 缺失（旧任务/测试桩）时回退原始树状态，避免把“有差异但未统计”误判成两侧一致，
+  // 从而抢在“过滤后无匹配”之前显示 identical 空态、藏掉清除过滤入口。
+  const raw = state.job && state.job.tree
+  if (!Array.isArray(raw)) return false
+  return raw.some(n => n && ['ADDED', 'DELETED', 'MODIFIED'].includes(String(n.status)))
 })
 
 const groups = computed(() => {
@@ -158,6 +272,7 @@ function basenameOf(k) { const i = (k || '').lastIndexOf('/'); return i >= 0 ? k
 function fileIcon(fc) {
   switch (fc) {
     case 'CLASS': return 'bi-filetype-java'
+    case 'JAVA': return 'bi-filetype-java'
     case 'JAR': return 'bi-box-seam'
     case 'JS': return 'bi-filetype-js'
     case 'HTML': return 'bi-filetype-html'
@@ -174,12 +289,28 @@ function fileIcon(fc) {
 
 // ===================== 视图模式 & 排序（任务 3） =====================
 // 视图模式：'tree'(目录树：按目录层级递归展开，节点仅显示当前层名称) | 'list'(全平摊，显示完整路径)。
-// 树视图下结构即路径，排序固定 path（目录内文件按名称/AI 风险）；排序菜单在树视图下 disabled，
-// 列表视图下全可选（path/name/status）。
+// T06220 增加 'queue'（审阅队列：按 AI 风险 + 审阅紧急度排序的平铺队列）。
 const viewMode = computed(() => (state.config && state.config.treeViewMode) || 'tree')
 const effectiveSortMode = computed(() => viewMode.value === 'tree' ? 'path' : ((state.config && state.config.treeSortMode) || 'path'))
 const sortByRisk = computed(() => !!(state.config && state.config.sortByRisk))
+function reviewQueueRank(key) {
+  const s = reviewStatusOf(key)
+  if (s === 'needs_review') return 0
+  if (s === 'unreviewed') return 1
+  if (s === 'in_progress') return 2
+  return 3
+}
 function compareNodes(a, b) {
+  // 审阅队列：AI 高风险优先，其次需复核/未审/进行中/已审，最后按路径稳定排序。
+  if (viewMode.value === 'queue') {
+    const ra = riskRank(aiClassify.value[a.key] && aiClassify.value[a.key].risk)
+    const rb = riskRank(aiClassify.value[b.key] && aiClassify.value[b.key].risk)
+    if (ra !== rb) return rb - ra
+    const qa = reviewQueueRank(a.key)
+    const qb = reviewQueueRank(b.key)
+    if (qa !== qb) return qa - qb
+    return a.key.localeCompare(b.key)
+  }
   // 风险等级置顶（高→低），打破平手时回落到 sortMode
   if (sortByRisk.value) {
     const ra = riskRank(aiClassify.value[a.key] && aiClassify.value[a.key].risk)
@@ -293,6 +424,8 @@ function toggleRisk(r) {
   if (!Array.isArray(cfg.filterRisk)) cfg.filterRisk = []
   const i = cfg.filterRisk.indexOf(r)
   if (i >= 0) cfg.filterRisk.splice(i, 1); else cfg.filterRisk.push(r)
+  // 手动调整原风险栏时退出“高风险”chip，避免两个入口互相矛盾。
+  if (reviewFilter.value.highRisk) reviewFilter.value = { ...reviewFilter.value, highRisk: false }
 }
 function statusMeta(s) { return STATUS_META[s] || STATUS_META.UNCHANGED }
 
@@ -326,6 +459,7 @@ const filtersActive = computed(() => {
   if (cfg.filterShowModified !== true || cfg.filterShowAdded !== true ||
       cfg.filterShowDeleted !== true || cfg.filterShowUnchanged !== true) return true
   if (riskEffective.value) return true
+  if (reviewFilter.value.status !== 'all' || reviewFilter.value.highRisk || reviewFilter.value.onlyFormatted || reviewFilter.value.onlyBookmarks) return true
   return false
 })
 const hitCount = computed(() => filtered.value.length)
@@ -420,7 +554,9 @@ const rows = computed(() => {
     }
   } else {
     // 列表视图：丢掉分组头，全局按 sortMode（含风险置顶）排序；archiveChild 紧随父级之后展开。
-    const sorted = filtered.value.slice().sort(compareNodes)
+    // 审阅队列：复用平铺渲染，但只保留可审阅文件，排序由 compareNodes 的 queue 分支给出。
+    const source = viewMode.value === 'queue' ? filtered.value.filter(isReviewableFile) : filtered.value
+    const sorted = source.slice().sort(compareNodes)
     for (const n of sorted) {
       out.push({ kind: 'node', key: n.key, node: n, depth: 0, name: n.key })
       if ((n.fileClass === 'ARCHIVE' || n.fileClass === 'JAR') && state.expandedArchives[n.key]) {
@@ -503,6 +639,35 @@ watch(() => (state.treeLocate && state.treeLocate.seq), () => {
     if (locateTimer) clearTimeout(locateTimer)
     locateTimer = setTimeout(() => { locateFlash.value = '' }, 1400)
   })
+})
+
+// ===================== T06220 标记后自动跳下一未审 =====================
+/** 目标在折叠目录内时，先展开其所有父目录（按节点所在 layer 生成 zoneKey）。 */
+function expandParentsOf(node) {
+  if (viewMode.value !== 'tree' || !node || !node.key) return
+  const layer = node.layer || '?'
+  const segs = node.key.split('/')
+  segs.pop() // 去掉文件名
+  if (!segs.length) return
+  const patch = { ...expandedDirs.value }
+  let prefix = ''
+  for (const s of segs) {
+    prefix = prefix ? prefix + '/' + s : s
+    patch[zoneDirKey(layer, prefix + '/')] = true // dir_tree 的目录 key 统一带尾斜杠
+  }
+  expandedDirs.value = patch
+}
+watch(() => state.reviewAdvanceTick, () => {
+  if (!autoNextUnreviewed.value) return
+  if (reviewFilter.value.status !== 'unreviewed') return
+  const next = nextUnreviewedNode(tree.value, state.activeKey, state.review, passesAutoNextFilters)
+  if (!next) { toast('info', t('dt.noNextUnreviewed')); return }
+  expandParentsOf(next)
+  selectEntry(next.key)
+  nextTick(() => {
+    state.treeLocate = { prefix: next.key, seq: ((state.treeLocate && state.treeLocate.seq) || 0) + 1 }
+  })
+  toast('success', t('dt.nextUnreviewed').replace('{key}', next.key))
 })
 
 // ===================== 右键菜单（BCompare 风格） =====================
@@ -749,6 +914,63 @@ function ruleTypeLabel(t) {
       <span class="tree-collapsed-label">{{ t('dt.treeTitle') }}</span>
     </div>
 
+    <!-- T06220 审阅统计头：已审/高风险/备注/书签 + 审阅状态 chips（PRD A4 / AC-07） -->
+    <div class="dt-review-head px-2 py-1" v-if="state.config">
+      <div class="dt-review-stats" :title="t('dt.reviewStatsTitle')">
+        <span class="dt-stat dt-stat-reviewed" :title="t('dt.stat.reviewedTip', { done: reviewStats.reviewed, total: reviewStats.totalFiles })">
+          <i class="bi bi-check2-circle"></i> {{ t('dt.stat.reviewed') }}
+          <b>{{ reviewStats.reviewed }}/{{ reviewStats.totalFiles }}</b>
+          <small>{{ reviewStats.filePercent }}%</small>
+        </span>
+        <span class="dt-stat" :class="{'text-danger': reviewStats.highRisk > 0}"
+              :title="hasAiClassification ? t('dt.stat.highRiskTip', { hi: reviewStats.highRisk, total: reviewStats.classified }) : t('dt.chip.highRiskNeedAi')">
+          <i class="bi bi-exclamation-triangle"></i> {{ t('dt.stat.highRisk') }}
+          <b>{{ reviewStats.highRisk }}/{{ reviewStats.classified }}</b>
+        </span>
+        <span class="dt-stat" :title="t('dt.stat.notesTip')">
+          <i class="bi bi-chat-left-text"></i> {{ t('dt.stat.notes') }} <b>{{ reviewStats.notes }}</b>
+        </span>
+        <span class="dt-stat" :title="t('dt.stat.bookmarksTip')">
+          <i class="bi bi-bookmark"></i> {{ t('dt.stat.bookmarks') }} <b>{{ reviewStats.bookmarks }}</b>
+        </span>
+      </div>
+      <div class="dt-review-chips" v-if="filterBarVisible">
+        <button v-for="chip in reviewChips" :key="chip.key" type="button"
+                class="dt-chip" :class="{active: reviewFilter.status === chip.key}"
+                :aria-pressed="reviewFilter.status === chip.key"
+                @click="setReviewStatus(chip.key)">
+          {{ t(chip.labelKey) }} <span>{{ chip.count }}</span>
+        </button>
+        <button type="button" class="dt-chip dt-chip-risk"
+                :class="{active: reviewFilter.highRisk, disabled: !hasAiClassification}"
+                :aria-pressed="reviewFilter.highRisk"
+                :disabled="!hasAiClassification"
+                :title="hasAiClassification ? t('dt.chip.highRiskTip') : t('dt.chip.highRiskNeedAi')"
+                @click="toggleHighRisk">
+          {{ t('dt.chip.highRisk') }} <span>{{ reviewStats.highRisk }}</span>
+        </button>
+        <button type="button" class="dt-chip dt-chip-fmt"
+                :class="{active: reviewFilter.onlyFormatted}"
+                :aria-pressed="reviewFilter.onlyFormatted"
+                :title="t('dt.chip.formattedTip')"
+                @click="toggleFormattedOnly">
+          {{ t('dt.chip.formatted') }} <span>{{ formattedOnlyCount }}</span>
+        </button>
+        <button type="button" class="dt-chip dt-chip-bm"
+                :class="{active: reviewFilter.onlyBookmarks, disabled: reviewStats.bookmarks === 0}"
+                :aria-pressed="reviewFilter.onlyBookmarks"
+                :disabled="reviewStats.bookmarks === 0"
+                :title="reviewStats.bookmarks ? t('dt.chip.bookmarksTip') : t('dt.chip.bookmarksEmpty')"
+                @click="toggleBookmarksOnly">
+          <i class="bi bi-bookmark"></i> {{ t('dt.chip.bookmarks') }} <span>{{ reviewStats.bookmarks }}</span>
+        </button>
+        <button v-if="filtersActive" type="button" class="dt-chip dt-chip-clear"
+                :title="t('dt.clearFiltersTip')" @click="clearAllFilters()">
+          <i class="bi bi-x-circle"></i> {{ t('dt.clearFilters') }}
+        </button>
+      </div>
+    </div>
+
     <!-- 搜索框 + 正则开关 + 「...」视图/排序菜单（过滤栏可通过菜单收起，偏好记忆于 localStorage） -->
     <div class="dt-toolbar px-2 py-1" v-if="state.config && filterBarVisible">
       <div class="d-flex align-items-center gap-2">
@@ -793,6 +1015,22 @@ function ruleTypeLabel(t) {
                 {{ t('dt.viewList') }}
               </a>
             </li>
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="#" @click.prevent="setViewMode('queue')"
+                 :class="{active: viewMode === 'queue'}" :title="t('dt.viewQueueTip')">
+                <i class="bi me-2" :class="viewMode === 'queue' ? 'bi-check2' : 'bi-list-check'" style="width:1rem"></i>
+                {{ t('dt.viewQueue') }}
+              </a>
+            </li>
+            <li><hr class="dropdown-divider"></li>
+            <li><h6 class="dropdown-header" style="font-size:.72rem;padding:.25rem 1rem">{{ t('dt.reviewMenuHeader') }}</h6></li>
+            <li>
+              <a class="dropdown-item d-flex align-items-center" href="#" @click.prevent="toggleAutoNext"
+                 :class="{active: autoNextUnreviewed}" :title="t('dt.autoNextTip')">
+                <i class="bi me-2" :class="autoNextUnreviewed ? 'bi-check2' : 'bi-arrow-right-circle'" style="width:1rem"></i>
+                {{ t('dt.autoNext') }}
+              </a>
+            </li>
             <li><hr class="dropdown-divider"></li>
             <li>
               <a class="dropdown-item d-flex align-items-center" href="#"
@@ -807,24 +1045,24 @@ function ruleTypeLabel(t) {
             <li><h6 class="dropdown-header" style="font-size:.72rem;padding:.25rem 1rem">{{ t('dt.sortHeader') }}</h6></li>
             <li>
               <a class="dropdown-item d-flex align-items-center" href="#" @click.prevent="setSortMode('path')"
-                 :class="{active: sortMenuKey === 'path', disabled: viewMode === 'tree'}"
-                 :title="viewMode === 'tree' ? t('dt.sortPathTipTree') : t('dt.sortPathTipList')">
+                 :class="{active: sortMenuKey === 'path', disabled: viewMode !== 'list'}"
+                 :title="viewMode !== 'list' ? t('dt.sortLockedTip') : t('dt.sortPathTipList')">
                 <i class="bi me-2" :class="sortMenuKey === 'path' ? 'bi-check2' : 'bi-sort-alpha-down'" style="width:1rem"></i>
                 {{ t('dt.sortPath') }}
               </a>
             </li>
             <li>
               <a class="dropdown-item d-flex align-items-center" href="#" @click.prevent="setSortMode('name')"
-                 :class="{active: sortMenuKey === 'name', disabled: viewMode === 'tree'}"
-                 :title="viewMode === 'tree' ? t('dt.treeSortLocked') : t('dt.sortNameTip')">
+                 :class="{active: sortMenuKey === 'name', disabled: viewMode !== 'list'}"
+                 :title="viewMode !== 'list' ? t('dt.sortLockedTip') : t('dt.sortNameTip')">
                 <i class="bi me-2" :class="sortMenuKey === 'name' ? 'bi-check2' : 'bi-sort-alpha-down'" style="width:1rem"></i>
                 {{ t('dt.sortName') }}
               </a>
             </li>
             <li>
               <a class="dropdown-item d-flex align-items-center" href="#" @click.prevent="setSortMode('status')"
-                 :class="{active: sortMenuKey === 'status', disabled: viewMode === 'tree'}"
-                 :title="viewMode === 'tree' ? t('dt.treeSortLocked') : t('dt.sortStatusTip')">
+                 :class="{active: sortMenuKey === 'status', disabled: viewMode !== 'list'}"
+                 :title="viewMode !== 'list' ? t('dt.sortLockedTip') : t('dt.sortStatusTip')">
                 <i class="bi me-2" :class="sortMenuKey === 'status' ? 'bi-check2' : 'bi-flag'" style="width:1rem"></i>
                 {{ t('dt.sortStatus') }}
               </a>
@@ -950,6 +1188,14 @@ function ruleTypeLabel(t) {
               <i class="bi bi-circle-fill" style="font-size:.5rem" :style="{color: statusMeta(row.node.status).dot}"></i>
               <i class="bi" :class="fileIcon(row.node.fileClass)" style="color:var(--bs-secondary-color)"></i>
               <span class="node-key text-truncate flex-1" :class="{'child-name': row.kind === 'archiveChild'}">{{ row.name || row.node.name || basenameOf(row.node.key) }}</span>
+              <!-- T06218 文件级审阅状态：与状态栏/文件栏同源 state.review，标记后同帧更新（AC-10） -->
+              <i v-if="hasReviewBadge(row.node.key)" class="bi review-tree-ic"
+                 :class="reviewIconOf(row.node.key)" :style="{color: reviewColorOf(row.node.key)}"
+                 :title="reviewLabelOf(row.node.key)"></i>
+              <span v-if="noteCountOf(row.node.key)" class="review-tree-mark" :title="t('dt.stat.notesTip')">
+                <i class="bi bi-chat-left-text"></i>{{ noteCountOf(row.node.key) }}
+              </span>
+              <i v-if="bookmarkCountOf(row.node.key)" class="bi bi-bookmark-fill review-tree-bm" :title="t('dt.stat.bookmarksTip')"></i>
               <span class="badge text-bg-light badge-fc border" :title="t('dt.fileType', { fc: row.node.fileClass || t('dt.unknown') })">{{ row.node.fileClass }}</span>
               <!-- T01810 FR-006 展示层：AST 口径「格式或位置变更」——被折叠为未变的格式化/重排差异显式可辨 -->
               <span v-if="row.node.formattedOnly" class="badge text-bg-light badge-fc border"
@@ -973,8 +1219,11 @@ function ruleTypeLabel(t) {
         <div class="mt-1 px-3" style="word-break:break-all">{{ state.error }}</div>
         <div class="dt-failed-tip mt-2">{{ t('dt.failedTip') }}</div>
       </div>
+      <div v-else-if="state.job && !jobHasDiff" class="text-center text-secondary py-4" style="font-size:.8rem">
+        {{ state.sameInputCompare ? t('dt.identicalSame') : t('dt.identical') }}
+      </div>
       <div v-else-if="!tree.length" class="text-center text-secondary py-4" style="font-size:.8rem">
-        {{ state.job ? t('dt.identical') : t('dt.empty') }}
+        {{ state.job ? t('dt.noMatch') : t('dt.empty') }}
       </div>
       <!-- 修复「勾选过滤条件后机构树消失」：tree 非空但 filtered 全被过滤掉时，给出明确提示
            （避免渲染区空白用户无所适从）。常见诱因：4 个过滤全未勾选 / 搜索/风险过滤过严。 -->
@@ -985,6 +1234,10 @@ function ruleTypeLabel(t) {
           <button type="button" class="btn btn-sm btn-outline-secondary py-0" style="font-size:.72rem"
                   @click="clearAllFilters()" :title="t('dt.clearFiltersTip')">{{ t('dt.clearFilters') }}</button>
         </div>
+      </div>
+      <div v-else-if="viewMode === 'queue' && !rows.length" class="text-center text-secondary py-4" style="font-size:.8rem">
+        <i class="bi bi-list-check d-block mb-1" style="font-size:1.2rem"></i>
+        {{ t('dt.queueEmpty') }}
       </div>
       <!-- 排除恢复条：右键「排除」的条目集中在这里一键恢复 -->
       <div v-if="excludedCount > 0" class="dt-excluded-bar d-flex align-items-center gap-2 px-2 py-1">
@@ -1002,7 +1255,7 @@ function ruleTypeLabel(t) {
 
   <!-- 属性弹窗 -->
   <div v-if="state.propertyNode" class="modal fade show d-block" tabindex="-1" role="dialog"
-       style="background: rgba(0,0,0,.45)" @click.self="hideProperties()">
+       style="background: var(--bdf-overlay-strong)" @click.self="hideProperties()">
     <div class="modal-dialog modal-dialog-centered" role="document" @keydown.esc="hideProperties()">
       <div class="modal-content">
         <div class="modal-header py-2">
@@ -1043,6 +1296,34 @@ function ruleTypeLabel(t) {
 </template>
 
 <style scoped>
+.dt-review-head { border-bottom: 1px solid var(--bs-border-color); background: var(--bs-body-bg); }
+.dt-review-stats { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem .7rem; font-size: .72rem; color: var(--bs-secondary-color); }
+.dt-stat { display: inline-flex; align-items: center; gap: .2rem; white-space: nowrap; }
+.dt-stat b { color: var(--bs-body-color); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dt-stat small { color: var(--bs-secondary-color); margin-left: .12rem; }
+.dt-review-chips { display: flex; flex-wrap: wrap; gap: .25rem; margin-top: .35rem; }
+.dt-chip {
+  border: 1px solid var(--bs-border-color);
+  background: transparent;
+  color: var(--bs-body-color);
+  border-radius: 999px;
+  font-size: .7rem;
+  line-height: 1.5;
+  padding: .02rem .45rem;
+  white-space: nowrap;
+}
+.dt-chip span { color: var(--bs-secondary-color); margin-left: .18rem; font-variant-numeric: tabular-nums; }
+.dt-chip:hover { background: var(--bs-tertiary-bg); }
+.dt-chip.active { background: var(--bs-primary); border-color: var(--bs-primary); color: #fff; }
+.dt-chip.active span { color: rgba(255,255,255,.82); }
+.dt-chip-risk.active { background: var(--bs-danger); border-color: var(--bs-danger); }
+.dt-chip.disabled { opacity: .55; cursor: not-allowed; }
+.dt-chip-clear { color: var(--bs-secondary-color); border-style: dashed; }
+.review-tree-mark {
+  display: inline-flex; align-items: center; gap: .12rem; font-size: .68rem;
+  color: var(--bs-primary); flex: 0 0 auto;
+}
+.review-tree-bm { color: var(--bs-primary); font-size: .72rem; flex: 0 0 auto; }
 .dt-toolbar { border-bottom: 1px solid var(--bs-border-color); }
 .dt-filters { border-bottom: 1px solid var(--bs-border-color); }
 .dt-filters .form-check-label { font-size: .8rem; color: var(--bs-body-color); }
@@ -1052,6 +1333,7 @@ function ruleTypeLabel(t) {
 .vt-root { position: relative; width: 100%; }
 .vt-window { position: absolute; top: 0; left: 0; right: 0; }
 .tree-node { overflow: hidden; }
+.review-tree-ic { font-size: .68rem; flex: 0 0 auto; }
 /* 归档展开 caret：与状态点同宽占位，保证子节点与父节点对齐 */
 .caret-slot { display: inline-flex; width: .9rem; flex: 0 0 auto; justify-content: center; }
 .tree-caret { font-size: .7rem; color: var(--bs-secondary-color); cursor: pointer; }

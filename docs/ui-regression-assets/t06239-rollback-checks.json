@@ -1,0 +1,30 @@
+{
+  "jobId": "job-584502",
+  "newUi": {
+    "launchpad": true,
+    "compareBar": true,
+    "legacyToolbar": false,
+    "treeRows": 4,
+    "bodyHasJob": true
+  },
+  "legacyUi": {
+    "legacyToolbar": true,
+    "compareBar": false,
+    "treeRows": 4,
+    "bodyHasJob": true
+  },
+  "review": {
+    "beforeFiles": [
+      "README.md"
+    ],
+    "afterFiles": [
+      "README.md"
+    ],
+    "reviewedLine": [
+      0
+    ],
+    "status": "reviewed"
+  },
+  "runtimeErrors": [],
+  "pass": true
+}

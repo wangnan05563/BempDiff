@@ -62,11 +62,18 @@ describe('About 组件', () => {
   })
 
   it('检查失败时优雅降级并展示后端 message（不抛错）', async () => {
-    checkUpdate.mockResolvedValueOnce({ ok: false, message: '检查更新失败：HTTP 403 —— 多为 GitHub API 限流。可设置环境变量 GITHUB_TOKEN 提升额度，稍后重试。', lastError: 'HTTP 403' })
+    checkUpdate.mockResolvedValueOnce({ ok: false, message: '检查更新失败：HTTP 403 —— 多为 GitHub API 限流。可设置环境变量 GITHUB_TOKEN 提升额度，稍后重试。', lastError: 'HTTP 403 - API rate limit exceeded for 1.2.3.4' })
     checkUpdate.mockResolvedValueOnce({ ok: false, message: '检查更新失败：HTTP 401' })
     const w = mount(About)
     await flushPromises()
     expect(w.text()).toContain('多为 GitHub API 限流')
+    // P2-7：原始技术错误默认不展开，点「查看技术详情」后才展示，且提供复制入口
+    expect(w.text()).not.toContain('API rate limit exceeded')
+    const detailBtn = w.findAll('button').find((b) => b.text().includes('查看技术详情'))
+    expect(detailBtn).toBeTruthy()
+    await detailBtn.trigger('click')
+    expect(w.text()).toContain('API rate limit exceeded')
+    expect(w.findAll('button').some((b) => b.text().includes('复制详情'))).toBe(true)
     w.unmount()
   })
 

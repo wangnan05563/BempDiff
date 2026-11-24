@@ -1,0 +1,217 @@
+{
+  "generatedAt": "2026-11-22T19:03:32.243Z",
+  "job": "job-431001",
+  "base": "http://127.0.0.1:4180/",
+  "checks": [
+    {
+      "name": "审阅操作条渲染",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "初始备注/书签计数为 0",
+      "ok": true,
+      "detail": "已审 1/3 33% 高风险 0/0 备注 0 书签 0 全部 3 未审 2 进行中 0 需复核 0 已审 1 高风险 0 仅格式变化 0 只看书签 0 清除过滤条件"
+    },
+    {
+      "name": "点击行后目标切到行级",
+      "ok": true,
+      "detail": "行 旧 6 / 新 6"
+    },
+    {
+      "name": "空备注被拦截",
+      "ok": true,
+      "detail": " 备注不能为空"
+    },
+    {
+      "name": "编辑器显示字数计数器",
+      "ok": true,
+      "detail": "20/2000 字\n备注保存在本地审阅文档；报告默认包含全文，可在导出时排除。"
+    },
+    {
+      "name": "行备注保存后文件栏出现备注计数",
+      "ok": true,
+      "detail": "[\"1\"]"
+    },
+    {
+      "name": "备注 chip 悬浮摘要可用",
+      "ok": true,
+      "detail": "[{\"text\":\"风险 这里需要确认空指针风险，返回前补充判空。\",\"title\":\"这里需要确认空指针风险，返回前补充判空。\"}]"
+    },
+    {
+      "name": "行备注服务端落盘",
+      "ok": true,
+      "detail": "{\"id\":\"note-mws7ft25-1\",\"scope\":\"line\",\"hunkId\":\"0\",\"line\":5,\"targetKey\":\"l:5\",\"oldLine\":\"6\",\"newLine\":\"6\",\"change\":\"rep\",\"hunkHeader\":\"@@ -6,1 +6,1 @@\",\"before\":\"        return count;\",\"after\":\"        return count + 1;\",\"text\":\"这里需要确认空指针风险，返回前补充判空。\",\"tag\":\"risk\",\"user\":\"hspcadmin\",\"createdAt\":\"2026-11-22T19:03:12.605Z\",\"updatedAt\":\"2026-11-22T19:03:12.606Z\"}"
+    },
+    {
+      "name": "行备注快照含旧/新行号",
+      "ok": true,
+      "detail": "{\"old\":\"6\",\"new\":\"6\"}"
+    },
+    {
+      "name": "行书签保存后文件栏出现书签计数",
+      "ok": true,
+      "detail": "[\"1\",\"1\"]"
+    },
+    {
+      "name": "AC-12 复制证据含文件路径",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "AC-12 复制证据含 Hunk 头",
+      "ok": true,
+      "detail": "## 证据摘录：src/Foo.java\n\n- **文件**：`src/Foo.java`\n- **Hunk**：`@@ -6,1 +6,1 @@`\n- **行号**：旧 6 / 新 6\n- **变更**：修改\n- **变更前**：`return count;`\n- **变更后**：`return count + 1;`\n\n**备注**：\n- 风险 · hspcadmin · 2026-11-22T19:03:12.606Z\n```te"
+    },
+    {
+      "name": "AC-12 复制证据含旧/新行号",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "AC-12 复制证据含变更前后摘要",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "AC-12 复制证据为 Markdown",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "AC-12 复制证据含备注正文",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文件级备注后共 3 条",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "树节点显示备注计数",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "文件级书签后共 3 个",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "树节点显示书签图标",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "只看书签筛选激活",
+      "ok": true,
+      "detail": "{\"active\":true,\"rows\":1,\"files\":[\"src/Foo.java\"]}"
+    },
+    {
+      "name": "只看书签仅保留有书签文件",
+      "ok": true,
+      "detail": "{\"active\":true,\"rows\":1,\"files\":[\"src/Foo.java\"]}"
+    },
+    {
+      "name": "取消只看书签恢复全部文件",
+      "ok": true,
+      "detail": "before=3 after=3"
+    },
+    {
+      "name": "备注 chip 点击可展开全文",
+      "ok": true,
+      "detail": "这里需要确认空指针风险，返回前补充判空。"
+    },
+    {
+      "name": "服务端持久化 3 条备注",
+      "ok": true,
+      "detail": "notes=3"
+    },
+    {
+      "name": "服务端持久化 3 个书签",
+      "ok": true,
+      "detail": "bookmarks=3"
+    },
+    {
+      "name": "备注正文未在服务端丢失",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "reload 后文件栏仍显示 3 条备注 / 3 书签",
+      "ok": true,
+      "detail": "[\"3\",\"3\"]"
+    },
+    {
+      "name": "reload 后树图标仍显示备注",
+      "ok": true,
+      "detail": "3"
+    },
+    {
+      "name": "报告预览打开",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "报告包含“证据与备注”章节",
+      "ok": true,
+      "detail": "\n状态：未审；备注 3 条；书签 3 个\n备注\n风险 · 行 · hspcadmin · 2026-11-22T19:03:12.606Z\n证据：src/Foo.java · @@ -6,1 +6,1 @@ · 旧 6 / 新 6\n这里需要确认空指针风险，返回前补充判空。\n兼容 · Hunk · hspcadmin · 2026-11-22T19:03:16.897Z\n证据：src/Foo.java · @@ -6,1 +6,1 @@ · 旧 — / 新 —\nHunk 级：后续兼容性确认。\n待确认 · 文件 · hspcadmin · 2026-11-22T19:03:19.209Z\n证据：src/Foo.java · 文件级 · 旧 — / 新 —\n<img src=x onerror=\"window.__xss=1\">\n书签\n行 · 旧 6 / 新 6 · @@ -6,1 +6,1 @@\nHunk · 旧 — / 新 — · @@ -6,1 +6,1 @@\n文件 · 旧 — / 新 — · 文件级\n本附录由 BempDiff 生成，离线可读；备注正文默认包含，导出前请确认隐私范围。"
+    },
+    {
+      "name": "报告默认包含备注正文",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "报告包含备注标签与书签",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "XSS 备注未生成 img 元素",
+      "ok": true,
+      "detail": "img=0"
+    },
+    {
+      "name": "XSS 未执行（window.__xss 未定义）",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "勾选排除后报告不含备注正文",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "排除后仍保留证据与计数",
+      "ok": true,
+      "detail": "\n风险 · 行 · hspcadmin · 2026-11-22T19:03:12.606Z\n证据：src/Foo.java · @@ -6,1 +6,1 @@ · 旧 6 / 新 6\n备注正文已排除\n兼容 · Hunk · hspcadmin · 2026-11-22T19:03:16.897Z\n证据：src/Foo.java · @@ -6,1 +6,1 @@ · 旧 — / 新 —\n备注正文已排除\n待确认 · 文件 · hspcadmin · 2026-11-22T19:03:19.209Z\n证据：src/Foo.java · 文件级 · 旧 — / 新 —\n备注正文已排除\n书签\n行 · 旧 6 / 新 6 · @@ -6,1 +6,1 @@\nHunk · 旧 — / 新 — · @@ -6,1 +6,1 @@\n文件 · 旧 — / 新 — · 文件级\n本附录由 BempDiff 生成，离线可读；备注正文已按导出选项排除。"
+    },
+    {
+      "name": "审阅 JSON 导出文件存在",
+      "ok": true,
+      "detail": "bempdiff-review-job-431001.json"
+    },
+    {
+      "name": "审阅 JSON 含备注/书签",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "审阅 JSON 遵守排除备注",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "运行期无异常",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "runtimeErrors": [],
+  "summary": {
+    "pass": 41,
+    "fail": 0
+  }
+}

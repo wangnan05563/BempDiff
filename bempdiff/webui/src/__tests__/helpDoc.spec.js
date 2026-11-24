@@ -8,6 +8,11 @@ import {
   contentMatchesVersion, PRODUCT_NAME, APP_VERSION, DOC_VERSION
 } from '../lib/helpContent'
 import HelpDoc from '../components/HelpDoc.vue'
+// 安装包版本唯一来源（Electron app.getVersion() 读取的就是 dev-shell/package.json）。
+// 用静态 JSON import 而非运行期 new URL(import.meta.url)：Vitest 的 import.meta.url 是 http 协议，
+// readFileSync 会报 "URL must be of scheme file"。
+import installerPkg from '../../../dev-shell/package.json'
+const INSTALLER_VERSION = installerPkg.version
 
 describe('帮助内容 数据模型', () => {
   it('结构自检通过（无非法块/缺字段/id 重复）', () => {
@@ -37,6 +42,11 @@ describe('帮助内容 数据模型', () => {
     expect(PRODUCT_NAME).toBe('BempDiff')
     expect(APP_VERSION).toBeTruthy()
     expect(DOC_VERSION).toBeTruthy()
+  })
+
+  it('浏览器模式回落的产品版本与安装包版本一致（防止关于页显示版本回退）', () => {
+    expect(INSTALLER_VERSION).toMatch(/^\d+\.\d+\.\d+/)
+    expect(APP_VERSION).toBe(INSTALLER_VERSION)
   })
 })
 

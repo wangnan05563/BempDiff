@@ -297,4 +297,26 @@ public final class ExportTest {
             Asserts.fail("导出估算测试失败: " + ex);
         }
     }
+
+    /** T06232：zipTree 先写临时文件再原子落位；旧包不应被半成品覆盖，且不残留 .bdfzip 临时文件。 */
+    public void testZipTree_atomicReplaceLeavesNoTempFile() throws IOException {
+        Path root = Files.createTempDirectory("bdexp-atomic-src");
+        Files.writeString(root.resolve("a.txt"), "A", StandardCharsets.UTF_8);
+        Path outDir = Files.createTempDirectory("bdexp-atomic-out");
+        Path zipOut = outDir.resolve("assets.zip");
+        Files.writeString(zipOut, "OLD-CORRUPT-PLACEHOLDER", StandardCharsets.UTF_8);
+
+        new AssetExporter().zipTree(root, zipOut);
+
+        Asserts.assertTrue("旧包应被新包替换", Files.size(zipOut) > 0);
+        boolean found = false;
+        try (ZipFile zf = new ZipFile(zipOut.toFile())) {
+            found = zf.getEntry("a.txt") != null;
+        }
+        Asserts.assertTrue("新包应包含导出文件", found);
+        try (java.util.stream.Stream<Path> s = Files.list(outDir)) {
+            Asserts.assertFalse("不应残留 .bdfzip 临时文件",
+                    s.anyMatch(p -> p.getFileName().toString().startsWith(".bdfzip-")));
+        }
+    }
 }

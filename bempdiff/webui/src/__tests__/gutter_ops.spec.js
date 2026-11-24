@@ -68,9 +68,9 @@ describe('FR-015 gutter 操作（T01811）', () => {
     await markBtn.trigger('click')
     await w.vm.$nextTick()
     expect(repRow.classes()).toContain('reviewed')
-    // 持久化结构：{ [jobId]: { [fileKey]: [ri] } }
-    const saved = JSON.parse(localStorage.getItem('bempdiff.reviewed') || '{}')
-    expect(saved['j-gutter'] && saved['j-gutter'][KEY], '应按 job+file 维度落盘').toBeTruthy()
+    // T06218 起审阅真源为服务端 reviews/{jobId}.json，内存态 state.review 同步更新；
+    // localStorage 仅保留旧数据迁移缓存，不再承担主存储。
+    expect(state.review.files[KEY] && state.review.files[KEY].lines, '应按 job+file 维度写入审阅状态').toBeTruthy()
     // 再次点击取消标记
     const row2 = w.findAll('.prow').filter(r => r.classes().includes('rep'))[0]
     await row2.find('.gt-op .bi-check2-circle').trigger('click')
@@ -83,7 +83,7 @@ describe('FR-015 gutter 操作（T01811）', () => {
     expect(clearBtn, '有标记时应显示清除按钮').toBeTruthy()
     await clearBtn.trigger('click')
     await w.vm.$nextTick()
-    expect(JSON.parse(localStorage.getItem('bempdiff.reviewed'))['j-gutter'][KEY]).toEqual([])
+    expect(state.review.files[KEY].lines).toEqual([])
     w.unmount()
   })
 

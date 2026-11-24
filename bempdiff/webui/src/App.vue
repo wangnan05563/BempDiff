@@ -1,15 +1,19 @@
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { state, init, closeReportPreview, triggerCompare, checkUpdateSilently, dismissUpdateHint } from './store'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { state, init, closeReportPreview, triggerCompare, checkUpdateSilently, dismissUpdateHint, saveTabLayout, applyAiPanelResponsive } from './store'
 import ToolBar from './components/ToolBar.vue'
+import CompareBar from './components/CompareBar.vue'
 import DiffTree from './components/DiffTree.vue'
 import DiffView from './components/DiffView.vue'
 import InfoPanel from './components/InfoPanel.vue'
+import InsightPanel from './components/InsightPanel.vue'
+import Launchpad from './components/Launchpad.vue'
 import StatusBar from './components/StatusBar.vue'
 import ConfigDialog from './components/ConfigDialog.vue'
 import CompareOverlay from './components/CompareOverlay.vue'
 import ReportPreview from './components/ReportPreview.vue'
 import CostGateDialog from './components/CostGateDialog.vue'
+import PreflightDialog from './components/PreflightDialog.vue'
 import GuideOverlay from './components/GuideOverlay.vue'
 import ShortcutHelp from './components/ShortcutHelp.vue'
 import DragDropOverlay from './components/DragDropOverlay.vue'
@@ -57,6 +61,44 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onGlobalKey))
 const treeW = ref(300)
 const aiW = ref(380)
 const aiResized = ref(false)
+// T06219：树栏宽度默认交给 CSS 断点；只有用户拖拽过才固定内联宽度。
+const treeResized = ref(false)
+
+// UI-06 布局持久化：栏宽 + 是否手动调整过。只存本地，不影响后端。
+const UI_LAYOUT_KEY = 'bempdiff.uiLayout'
+function loadUiLayout() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(UI_LAYOUT_KEY) || 'null')
+    if (!raw) return
+    if (Number.isFinite(raw.treeW)) treeW.value = Math.max(180, Math.min(720, raw.treeW))
+    if (Number.isFinite(raw.aiW)) aiW.value = Math.max(240, Math.min(800, raw.aiW))
+    aiResized.value = !!raw.aiResized
+    // 兼容旧数据：无 treeResized 字段时，非 300 视为用户拖拽过。
+    treeResized.value = raw.treeResized === true || (raw.treeResized === undefined && Number(raw.treeW) !== 300)
+  } catch (_) { /* 坏数据静默 */ }
+}
+function saveUiLayout() {
+  try {
+    localStorage.setItem(UI_LAYOUT_KEY, JSON.stringify({ treeW: treeW.value, aiW: aiW.value, aiResized: aiResized.value, treeResized: treeResized.value }))
+  } catch (_) { /* 存储不可用静默 */ }
+}
+onMounted(loadUiLayout)
+watch([treeW, aiW, aiResized, treeResized], saveUiLayout)
+// 切换新旧 IA 时重新按断点决定右栏收起态（显式偏好仍优先）。
+watch(() => state.reviewCockpit, () => applyAiPanelResponsive())
+// tabs/pin/激活页变化时落盘；恢复失败不阻塞启动（store 内部已 catch）。
+// 滚动位置复用 tab.scroll，滚轮事件高频——300ms 合并写 localStorage，避免每帧同步落盘卡顿。
+let tabSaveTimer = null
+function scheduleSaveTabLayout() {
+  if (tabSaveTimer) clearTimeout(tabSaveTimer)
+  tabSaveTimer = setTimeout(() => { tabSaveTimer = null; saveTabLayout() }, 300)
+}
+watch([() => state.tabs, () => state.activeKey, () => state.job], scheduleSaveTabLayout, { deep: true })
+onMounted(() => window.addEventListener('beforeunload', saveTabLayout))
+onBeforeUnmount(() => {
+  if (tabSaveTimer) clearTimeout(tabSaveTimer)
+  window.removeEventListener('beforeunload', saveTabLayout)
+})
 
 let dragCtx = null
 function startResize(which, e) {
@@ -82,9 +124,8 @@ function onResize(e) {
   const MIN = 120
   const MAX = Math.max(MIN + 1, window.innerWidth * 0.6)
   const w = Math.min(MAX, Math.max(MIN, raw))
-  if (dragCtx.which === 'tree') treeW.value = w
-  else { aiW.value = w; aiResized.value = true }
-}
+  if (dragCtx.which === 'tree') { treeW.value = w; treeResized.value = true }
+  else { aiW.value = w; aiResized.value = true }}
 function endResize() {
   if (!dragCtx) return
   dragCtx = null
@@ -110,25 +151,37 @@ function onPreviewClose() {
 </script>
 
 <template>
-  <ToolBar :on-open-config="() => (showConfig = true)" :on-open-report="() => (showReport = true)" />
+  <!-- T06219 新版 Compare Bar；feature flag 关闭时回退旧 ToolBar（数据在同一 state，不丢比对/审阅） -->
+  <CompareBar v-if="state.reviewCockpit"
+              :on-open-config="() => (showConfig = true)"
+              :on-open-report="() => (showReport = true)"
+              :on-open-help="() => (showShortcuts = true)" />
+  <ToolBar v-else :on-open-config="() => (showConfig = true)" :on-open-report="() => (showReport = true)"
+           :on-open-help="() => (showShortcuts = true)" />
+
+  <!-- T06223：新版 IA 的默认工作台首屏；点击最近/新建后进入工作区。旧版 IA 始终直接进工作区。 -->
+  <Launchpad v-if="state.reviewCockpit && state.launchpadOpen" />
 
   <!-- 专注模式：隐藏左右栏，中间 diff 占满视野（由 state.focusMode 控制） -->
-  <div class="app-main" :class="{ 'focus-mode': state.focusMode }">
-    <DiffTree :panel-width="treeW" />
+  <div v-if="!state.reviewCockpit || !state.launchpadOpen"
+       class="app-main" :class="{ 'focus-mode': state.focusMode, 'review-cockpit': state.reviewCockpit, 'mobile-tree-open': state.mobileTreeOpen }">
+    <DiffTree :panel-width="treeResized ? treeW : undefined" />
     <div v-show="!state.treePanelCollapsed" class="vt-handle" :title="t('app.resizeTree')"
          @mousedown="startResize('tree', $event)"></div>
     <DiffView />
     <div v-show="!state.aiPanelCollapsed" class="vt-handle" :title="t('app.resizeAi')"
          @mousedown="startResize('ai', $event)"></div>
-    <InfoPanel :panel-width="aiResized ? aiW : undefined" />
+    <InsightPanel v-if="state.reviewCockpit" :panel-width="aiResized ? aiW : undefined" />
+    <InfoPanel v-else :panel-width="aiResized ? aiW : undefined" />
   </div>
 
-  <StatusBar />
+  <StatusBar v-if="!state.reviewCockpit || !state.launchpadOpen" />
 
   <ConfigDialog :visible="showConfig" @close="showConfig = false" />
   <!-- 报告预览：既能看全局 reportMd，也能看 AI 控制台里某次任务的预览报告（:md 优先） -->
   <ReportPreview :visible="showReport || state.previewOpen" :md="state.previewOpen ? state.previewMd : null" @close="onPreviewClose" />
   <CostGateDialog />
+  <PreflightDialog />
   <CompareOverlay />
   <!-- R6 快捷键速查面板：「?」唤起 -->
   <ShortcutHelp v-if="showShortcuts" @close="showShortcuts = false" />
@@ -172,8 +225,7 @@ function onPreviewClose() {
    Bootstrap 5.3 的 .btn-primary 等背景为编译期硬编码，须显式重映射；色值经
    color-mix 生成 hover/active 层次，亮暗主题通用（跟随 --bs-body-bg）。 */
 [data-accent] {
-  --acc: #0d6efd;
-  --acc-rgb: 13, 110, 253;
+  --acc: var(--bdf-accent);
 }
 [data-accent] .btn-primary {
   --bs-btn-bg: var(--acc);
@@ -200,7 +252,7 @@ function onPreviewClose() {
 [data-accent] .form-check-input:checked { background-color: var(--acc); border-color: var(--acc); }
 [data-accent] .form-control:focus, [data-accent] .form-select:focus {
   border-color: color-mix(in srgb, var(--acc) 60%, white);
-  box-shadow: 0 0 0 .25rem rgba(var(--acc-rgb), .25);
+  box-shadow: 0 0 0 .25rem color-mix(in srgb, var(--acc) 25%, transparent);
 }
 [data-accent] .nav-tabs .nav-link.active { color: var(--acc); }
 [data-accent] .list-group-item.active { background-color: var(--acc); border-color: var(--acc); }

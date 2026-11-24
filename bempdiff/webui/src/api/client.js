@@ -9,6 +9,7 @@ async function req(method, path, body, opts = {}) {
     init.body = JSON.stringify(body)
   }
   if (opts.signal) init.signal = opts.signal
+  if (opts.keepalive) init.keepalive = true
   let res
   try {
     res = await fetch(BASE + path, init)
@@ -32,8 +33,26 @@ async function req(method, path, body, opts = {}) {
 export const api = {
   // body: { leftType:'package'|'folder', leftPath, rightPath, options? }
   compare(payload) { return req('POST', '/api/session/compare', payload) },
+  // CX-09 比对前预检（只读，不建 job）：-> { ok, level, blockers[], warnings[], infos[], estimatedSeconds, left, right }
+  preflight(payload) { return req('POST', '/api/session/preflight', payload) },
   // -> { jobId, status, tree }
   jobStatus(id) { return req('GET', `/api/job/${encodeURIComponent(id)}/status`) },
+  jobInsights(id, opts = {}) {
+    const q = new URLSearchParams()
+    if (Number.isFinite(opts.offset)) q.set('offset', String(opts.offset))
+    if (Number.isFinite(opts.limit)) q.set('limit', String(opts.limit))
+    const suffix = q.toString() ? `?${q}` : ''
+    return req('GET', `/api/job/${encodeURIComponent(id)}/insights${suffix}`)
+  },
+  // T06218 文件级审阅文档：GET 不存在也返回空文档 + exists=false（前端据此迁移旧 localStorage）。
+  getReview(id, opts = {}) {
+    return req('GET', `/api/review/${encodeURIComponent(id)}`, undefined, opts)
+  },
+  // PUT 会由后端按 Hunk 聚合重算每个文件 status，手动覆盖优先；返回 { ...doc, summary, exists, ok }
+  putReview(id, doc, opts = {}) {
+    return req('PUT', `/api/review/${encodeURIComponent(id)}`, doc, opts)
+  },
+  deleteReview(id) { return req('DELETE', `/api/review/${encodeURIComponent(id)}`) },
   // -> { oldSrc, newSrc, diffText, engine, ok }
   // opts: { signal } 用于切换 tab 时取消在途请求
   decompile(jobId, key, opts = {}) {
@@ -85,6 +104,7 @@ export const api = {
   },
   // -> config json（GET 不回显 apiKey，含 hasApiKey）
   getConfig() { return req('GET', '/api/config') },
+  getSample() { return req('GET', '/api/sample') },
   // cfg: 部分/完整 config
   putConfig(cfg) { return req('PUT', '/api/config', cfg) },
   // -> { ok, freedBytes, files, dirs }  手动清理解压/抽取临时文件与遗留运行时目录（退出兜底场景）

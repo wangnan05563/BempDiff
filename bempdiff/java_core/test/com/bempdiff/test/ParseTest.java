@@ -112,8 +112,8 @@ public final class ParseTest {
         Asserts.assertEquals("class 魔数校验", (byte) (byte) 0xFE, bytes[1]);
     }
 
-    public void testExpandAllForPlainJar_wiring() throws IOException {
-        // 普通 jar 中一个非内部前缀的 class（otherpkg/ 不在 com/、cn/ 内）：默认 L0，开启 expandAllForPlainJar 后变 L1
+    public void testPlainJarClassesDefaultL1() throws IOException {
+        // 普通 jar 顶层 class 属于构件自身业务码：默认即 L1（不再依赖 expandAllForPlainJar）。
         Map<String, byte[]> e = new LinkedHashMap<>();
         e.put("otherpkg/Y.class", TestFixtures.compileClass("otherpkg.Y",
                 "package otherpkg; public class Y { public int v=1; }"));
@@ -121,13 +121,13 @@ public final class ParseTest {
 
         ParseConfig cfgDefault = new ParseConfig();
         PackageSnapshot snapDefault = parser.parse(p, cfgDefault, false);
-        Asserts.assertEquals("默认非前缀 class 应为 L0", Layer.L0,
+        Asserts.assertEquals("普通 jar 顶层 class 默认应为 L1", Layer.L1,
                 snapDefault.getEntries().get("otherpkg/Y.class").getLayer());
 
         ParseConfig cfgExpand = new ParseConfig();
         cfgExpand.setExpandAllForPlainJar(true);
         PackageSnapshot snapExpand = parser.parse(p, cfgExpand, false);
-        Asserts.assertEquals("开启 expandAllForPlainJar 后应为 L1", Layer.L1,
+        Asserts.assertEquals("开启 expandAllForPlainJar 后仍为 L1", Layer.L1,
                 snapExpand.getEntries().get("otherpkg/Y.class").getLayer());
     }
 

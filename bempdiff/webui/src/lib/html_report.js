@@ -7,8 +7,8 @@
  * - 正文复用既有 renderMarkdown（行级转义）+ colorizeReport（风险等级着色）管线，与预览一致；
  * - 生成时间注入页脚，供审计留痕。
  */
-import { renderMarkdown } from './markdown'
-import { colorizeReport } from './severity'
+import { renderMarkdown } from './markdown.js'
+import { colorizeReport } from './severity.js'
 
 function escapeHtml(s) {
   return String(s == null ? '' : s)

@@ -10,7 +10,16 @@
     "preview": "vite preview --port 4173",
     "test": "node scripts/test_report_button.mjs",
     "test:unit": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "check:tokens": "node scripts/check_tokens.mjs",
+    "check:components": "node scripts/check_component_tokens.mjs",
+    "check:theme-boot": "node scripts/check_theme_boot.mjs",
+    "check:theme-matrix": "node scripts/check_theme_matrix.mjs",
+    "check:theme-switch": "node scripts/check_theme_switch.mjs",
+    "check:theme-system": "node scripts/check_theme_system.mjs",
+    "check:review": "node scripts/check_review.mjs",
+    "check:review-tree": "node scripts/check_review_tree.mjs",
+    "check:review-notes": "node scripts/check_review_notes.mjs"
   },
   "dependencies": {
     "bempdiff": "file:..",

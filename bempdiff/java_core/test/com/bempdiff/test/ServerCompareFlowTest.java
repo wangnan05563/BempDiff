@@ -143,6 +143,13 @@ public final class ServerCompareFlowTest {
             Asserts.assertTrue("export/start 应为 zip", exp2.body().length > 22
                     && exp2.body()[0] == 'P' && exp2.body()[1] == 'K');
 
+            // 3.1) P2-4：样本不含 lib/*.jar 差异，JAR 粒度应 409 而不是下发空 zip
+            HttpResponse<String> jarEmpty = s.post("/api/job/" + jobId + "/export/start",
+                    "{\"granularity\":\"jar\"}");
+            Asserts.assertEquals("无变化 jar 时 JAR 粒度应 409", 409, jarEmpty.statusCode());
+            Asserts.assertContains("应说明缺少 lib/*.jar 差异",
+                    String.valueOf(json(jarEmpty).get("error")), "lib/*.jar");
+
             // 4) Markdown 报告
             HttpResponse<String> rep = s.get("/api/job/" + jobId + "/report");
             Asserts.assertEquals("report 应 200", 200, rep.statusCode());

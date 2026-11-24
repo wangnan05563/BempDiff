@@ -1,6 +1,6 @@
 <script setup>
 import { computed, ref, shallowRef, nextTick, onMounted, onUnmounted, onUpdated, watch } from 'vue'
-import { state, activeTab, closeTab, pinTab, closeOtherTabs, closeAllTabs, toggleFocusMode, setFocusMode, toggleAiPanel, STATUS_META, STATUS_LABEL, fmtBytes, setHlTheme } from '../store'
+import { state, activeTab, closeTab, pinTab, closeOtherTabs, closeAllTabs, toggleFocusMode, setFocusMode, toggleAiPanel, STATUS_META, STATUS_LABEL, fmtBytes, setHlTheme, ensureTabLoaded, reviewFileInfo, updateReviewFileState, reviewNotesOf, reviewBookmarksOf, saveReviewNote, deleteReviewNote, toggleReviewBookmarkState, isReviewBookmarked } from '../store'
 import { toast } from '../store'
 import { t } from '../lib/i18n'
 import { inlineDiff } from '../lib/diff_inline'
@@ -11,8 +11,16 @@ import { searchRows } from '../lib/diff_search'
 import { tokenInfoAt, TOKEN_META } from '../lib/token_classify'
 import { langOf, tokenizeLine } from '../lib/syntax_highlight'
 import { hlThemeOf, HL_THEMES } from '../lib/hl_themes'
+import { configKindOf } from '../lib/config_semantic'
+import { REVIEW_STATUS, deriveHunkStatuses, reviewStatusMeta as reviewStatusMetaOf } from '../lib/review'
+import {
+  normalizeFileNotes, normalizeFileBookmarks, notesForTarget, bookmarkForTarget, noteTargetKey,
+  buildEvidenceMarkdown, REVIEW_NOTE_TAG_META, summarizeInline, normalizeNoteScope
+} from '../lib/review_notes'
 import PathBar from './PathBar.vue'
 import ContextMenu from './ContextMenu.vue'
+import ReviewNoteEditor from './ReviewNoteEditor.vue'
+import ConfigDiffPanel from './ConfigDiffPanel.vue'
 
 // STATUS_META / STATUS_LABEL 从 store.js 共享，避免与 DiffTree/InfoPanel 重复定义
 const STATUS_CLS = {
@@ -29,6 +37,9 @@ const EST_ROW_H = 21          // 行高估算值（真实高度由 measureVisibl
                                // 改这里必须同步改 CSS，否则热力图点击跳转与行定位会漂移。
 const OVERSCAN = 12           // 视口上下额外渲染行数（滚动缓冲）
 const OVERSIZED_LINES = 60000  // 差异行数超此阈值 → 降级「简洁视图」（关行内高亮 + 默认折叠未变）
+// jsdom 无真实布局：其 ResizeObserver polyfill 会对超大虚拟列表反复回调并重建 heights 数组，
+// 单测里 4 万行可白耗 10s+。测试环境跳过观察器（行高沿用 EST_ROW_H，虚拟窗口照常工作）。
+const IS_JSDOM = typeof navigator !== 'undefined' && /jsdom/i.test(navigator.userAgent || '')
 
 // 默认 BCompare 风格：左右分栏并排（不换行、双侧横向滚动同步）；可切换为自动换行单容器
 const wrap = ref(false)
@@ -91,41 +102,16 @@ function revertAllEdits() {
 }
 const hasEdits = computed(() => editedRows.value.size > 0)
 
-// 标记已审阅：按 job+file 维度持久化（同 job 同文件的行对齐是确定性的，行号稳定）；
-// 行视觉弱化（置灰）表示人工过目，一键清除。与行选择/复制互不干扰（.stop 阻断冒泡）。
-// curFileKey/watch 依赖后文定义的 at（tab 激活态），故拆到 at 初始化之后（见 fclassMeta 附近），
-// 避免 watch 建立即求值 source 时触发 TDZ。
-const REVIEWED_KEY = 'bempdiff.reviewed'
-const reviewedMarks = ref(new Set())
-const reviewedStoreKey = computed(() => (state.job && state.job.jobId) || '_')
-function loadReviewed() {
-  reviewedMarks.value = new Set()
-  try {
-    const all = JSON.parse(localStorage.getItem(REVIEWED_KEY) || '{}')
-    const arr = (all[reviewedStoreKey.value] || {})[curFileKey.value]
-    if (Array.isArray(arr)) reviewedMarks.value = new Set(arr)
-  } catch (_) { /* 损坏数据静默重置，不阻塞渲染 */ }
-}
-function saveReviewed() {
-  try {
-    const all = JSON.parse(localStorage.getItem(REVIEWED_KEY) || '{}')
-    const job = all[reviewedStoreKey.value] || {}
-    job[curFileKey.value] = [...reviewedMarks.value]
-    all[reviewedStoreKey.value] = job
-    localStorage.setItem(REVIEWED_KEY, JSON.stringify(all))
-  } catch (_) { /* 持久化失败仅丢失跨会话标记，不影响本次会话 */ }
-}
-function toggleReviewed(ri) {
-  if (reviewedMarks.value.has(ri)) reviewedMarks.value.delete(ri)
-  else reviewedMarks.value.add(ri)
-  reviewedMarks.value = new Set(reviewedMarks.value)
-  saveReviewed()
-}
-const hasReviewed = computed(() => reviewedMarks.value.size > 0)
-function clearReviewed() {
-  reviewedMarks.value = new Set()
-  saveReviewed()
-}
+// ---------------- T06218 文件级审阅（Hunk 聚合 + 手动覆盖） ----------------
+// 真源在后端 reviews/{jobId}.json。本组件只根据当前文件 doc 派生行/Hunk 视觉，
+// 点击后同步写入 store（store 立即更新 reviewSummary，再 80ms 防抖落盘）。
+const reviewFile = computed(() => (state.job && curFileKey.value) ? reviewFileInfo(curFileKey.value) : null)
+const reviewedMarks = computed(() => new Set((reviewFile.value && reviewFile.value.lines) || []))
+const reviewStatus = computed(() => (reviewFile.value && reviewFile.value.status) || REVIEW_STATUS.UNREVIEWED)
+const reviewManual = computed(() => !!(reviewFile.value && reviewFile.value.manualOverride))
+const reviewStatusMeta = computed(() => reviewStatusMetaOf(reviewStatus.value))
+const reviewStatusLabel = computed(() => t(reviewStatusMeta.value.labelKey))
+const hasReviewed = computed(() => reviewedMarks.value.size > 0 || Object.keys((reviewFile.value && reviewFile.value.hunks) || {}).some(k => (reviewFile.value.hunks[k] === REVIEW_STATUS.REVIEWED)))
 
 // 折叠上下文行数：默认 3（变化行前后各保留 3 行）。FR-003 验收①要求「默认 3~5 行可配置」，
 // 故放开为用户可调并持久化——沿 DiffView 既有惯例（copyWithLineNo 同款 localStorage 轻量偏好）。
@@ -168,16 +154,81 @@ function foldLabel(v) {
 const forceFull = ref(false) // 用户在超大文件时手动「展开完整差异」（开启行内高亮 + 展开未变）
 
 const tabs = computed(() => state.tabs)
+// UI-06：钉住的 tab 永远优先，激活 tab 至少保留一个可见位；超过 8 个折叠进「更多」菜单。
+const MAX_VISIBLE_TABS = 8
+const overflowOpen = ref(false)
+const overflowToggleRef = ref(null)
+const overflowMenuRef = ref(null)
+const pendingScroll = ref(0)
+function openOverflow() {
+  overflowOpen.value = true
+  nextTick(() => {
+    const first = overflowMenuRef.value && overflowMenuRef.value.querySelector('.dvt-overflow-item')
+    if (first && first.focus) first.focus()
+  })
+}
+function closeOverflow(restoreFocus = false) {
+  overflowOpen.value = false
+  if (restoreFocus && overflowToggleRef.value && overflowToggleRef.value.focus) overflowToggleRef.value.focus()
+}
+const visibleTabs = computed(() => {
+  const list = tabs.value
+  if (list.length <= MAX_VISIBLE_TABS) return list
+  const pinned = list.filter(t => t.pinned)
+  const active = list.find(t => t.key === state.activeKey)
+  const keep = new Set()
+  if (active && !active.pinned) {
+    keep.add(active.key)
+    for (const t of pinned) {
+      if (keep.size >= MAX_VISIBLE_TABS - 1) break
+      keep.add(t.key)
+    }
+  } else {
+    for (const t of pinned) {
+      if (keep.size >= MAX_VISIBLE_TABS) break
+      keep.add(t.key)
+    }
+    if (active) keep.add(active.key)
+  }
+  for (const t of list) {
+    if (keep.size >= MAX_VISIBLE_TABS) break
+    keep.add(t.key)
+  }
+  return list.filter(t => keep.has(t.key))
+})
+const overflowTabs = computed(() => tabs.value.filter(t => !visibleTabs.value.some(v => v.key === t.key)))
+function onOverflowTab(key) {
+  overflowOpen.value = false
+  onTabClick(key)
+}
+function onOverflowDocClick(e) {
+  if (e.target && e.target.closest && e.target.closest('.dvt-tab-overflow')) return
+  overflowOpen.value = false
+}
 const at = computed(() => activeTab())
+// UI-06：切换 tab 时恢复该 tab 上次滚动位置（会话内即时恢复；重启恢复由 tab.scroll 快照支撑）。
+watch(() => state.activeKey, () => {
+  pendingScroll.value = at.value ? (Number(at.value.scroll) || 0) : 0
+  if (!pendingScroll.value) return
+  nextTick(() => applyPendingScroll())
+  setTimeout(() => applyPendingScroll(), 120) // 反编译/虚拟列表首帧高度回填后再校正一次
+})
 // T01811（接前）：curFileKey 依赖 at（tab 激活态）——at 定义后才能建立 watch（避免 TDZ）。
 const curFileKey = computed(() => (at.value && at.value.node && at.value.node.key) || (at.value && at.value.key) || '')
-// 切文件/切 job：手动覆盖作废（行号属旧对齐），已审阅标记按新维度恢复
-watch([reviewedStoreKey, curFileKey], () => {
+// 切文件/切 job：手动覆盖作废（行号属旧对齐）；审阅状态由 reviewFile 计算属性按新 key 自动切换
+watch(curFileKey, () => {
   editedRows.value = new Set()
-  loadReviewed()
+  reviewTargetRow.value = -1
+  noteEditor.value = { open: false, target: null, note: null }
 })
 const node = computed(() => at.value ? at.value.node : null)
 const dec = computed(() => at.value ? at.value.decompile : null)
+watch(dec, () => {
+  if (pendingScroll.value > 0) {
+    nextTick(() => applyPendingScroll())
+    setTimeout(() => applyPendingScroll(), 120)
+  }
+})
 const busy = computed(() => !!(at.value && at.value.busy && !dec.value))
 const tabErr = computed(() => at.value ? at.value.error : null)
 
@@ -197,17 +248,17 @@ function statusDot(s) { return (STATUS_META[s] || STATUS_META.UNCHANGED).dot }
 // 颜色均为主题中性的「类型色」，仅作点缀，不与增删改高亮（红/绿/橙）冲突。
 // ======================================================================
 const FCLASS_META = {
-  CLASS:  { labelKey: 'dv.fc.CLASS',  icon: 'bi-filetype-java',    accent: '#7c5cff' },
-  JAR:    { labelKey: 'dv.fc.JAR',    icon: 'bi-archive',          accent: '#9c6ade' },
-  CONFIG: { labelKey: 'dv.fc.CONFIG', icon: 'bi-gear',             accent: '#d97706' },
-  JS:     { label: 'JS',       icon: 'bi-filetype-js',      accent: '#c9930e' },
-  HTML:   { label: 'HTML',     icon: 'bi-filetype-html',    accent: '#d9534f' },
-  CSS:    { label: 'CSS',      icon: 'bi-filetype-css',     accent: '#1f7fc4' },
-  JSP:    { label: 'JSP',      icon: 'bi-filetype-xml',     accent: '#c05621' },
-  OFFICE: { label: 'Office',   icon: 'bi-file-earmark-easel', accent: '#0f9d8f' },
-  STATIC: { labelKey: 'dv.fc.STATIC', icon: 'bi-image',            accent: '#6b7280' },
-  ARCHIVE:{ labelKey: 'dv.fc.ARCHIVE', icon: 'bi-file-earmark-zip', accent: '#8a94a6' },
-  OTHER:  { labelKey: 'dv.fc.OTHER',  icon: 'bi-file-earmark',     accent: '#6b7280' }
+  CLASS:  { labelKey: 'dv.fc.CLASS',  icon: 'bi-filetype-java',    accent: 'var(--bdf-type-class)' },
+  JAR:    { labelKey: 'dv.fc.JAR',    icon: 'bi-archive',          accent: 'var(--bdf-type-jar)' },
+  CONFIG: { labelKey: 'dv.fc.CONFIG', icon: 'bi-gear',             accent: 'var(--bdf-type-config)' },
+  JS:     { label: 'JS',       icon: 'bi-filetype-js',      accent: 'var(--bdf-type-js)' },
+  HTML:   { label: 'HTML',     icon: 'bi-filetype-html',    accent: 'var(--bdf-type-html)' },
+  CSS:    { label: 'CSS',      icon: 'bi-filetype-css',     accent: 'var(--bdf-type-css)' },
+  JSP:    { label: 'JSP',      icon: 'bi-filetype-xml',     accent: 'var(--bdf-type-jsp)' },
+  OFFICE: { label: 'Office',   icon: 'bi-file-earmark-easel', accent: 'var(--bdf-type-office)' },
+  STATIC: { labelKey: 'dv.fc.STATIC', icon: 'bi-image',            accent: 'var(--bdf-type-static)' },
+  ARCHIVE:{ labelKey: 'dv.fc.ARCHIVE', icon: 'bi-file-earmark-zip', accent: 'var(--bdf-type-archive)' },
+  OTHER:  { labelKey: 'dv.fc.OTHER',  icon: 'bi-file-earmark',     accent: 'var(--bdf-type-other)' }
 }
 function fclassMeta(fc) { return FCLASS_META[fc] || FCLASS_META.OTHER }
 // 文件类型显示名（FCLASS_META 存 labelKey，渲染期求值支持切语言）
@@ -226,7 +277,7 @@ function fcOf(t) { return (t.node && t.node.fileClass) || 'OTHER' }
  * 缺失占位 0000000 统一给灰色，提示「该侧无内容」。
  */
 function hashTone(h) {
-  if (!h || h === '0000000') return '#9ca3af'
+  if (!h || h === '0000000') return 'var(--bdf-type-missing)'
   const v = parseInt(h.substring(0, 2), 16) || 0
   return 'hsl(' + (v * 3.6).toFixed(0) + ', 60%, 50%)'
 }
@@ -245,6 +296,11 @@ const lang = computed(() => {
 function gtIcon(v, side) {
   if (side === 'left') return v.type === 'del' || v.type === 'rep' ? 'bi-dash' : ''
   return v.type === 'add' || v.type === 'rep' ? 'bi-plus' : ''
+}
+/** TH-03 色盲模式：用文本符号替代纯色图标；空侧不显示，rep 两侧统一用 ≈ 表示「成对修改」。 */
+function gtSymbol(v, side) {
+  if (side === 'left') return v.type === 'del' ? '−' : (v.type === 'rep' ? '≈' : '')
+  return v.type === 'add' ? '+' : (v.type === 'rep' ? '≈' : '')
 }
 
 // ======================================================================
@@ -292,6 +348,348 @@ function startParse() {
   rows.value = out
   totalStats.value = c
   parseStatus.value = 'done'
+  syncReviewForCurrentFile()
+}
+
+// ---------------- T06218 Hunk 推导与状态写回 ----------------
+// 连续的非 ctx 行 = 一个 Hunk；id 用顺序 ordinal（同 job/file 的对齐确定性保证稳定）。
+const hunkSpans = computed(() => {
+  const rs = rows.value
+  const out = []
+  let cur = null
+  for (let i = 0; i < rs.length; i++) {
+    if (rs[i].type === 'ctx') {
+      if (cur) { out.push(cur); cur = null }
+    } else {
+      if (!cur) cur = { id: String(out.length), startRow: i, endRow: i, rows: [] }
+      cur.endRow = i
+      cur.rows.push(i)
+    }
+  }
+  if (cur) out.push(cur)
+  return out
+})
+const rowHunkIndex = computed(() => {
+  const m = new Map()
+  for (const h of hunkSpans.value) for (const ri of h.rows) m.set(ri, h.id)
+  return m
+})
+function hunkAtRow(ri) {
+  const hs = hunkSpans.value
+  if (hs.length === 1) return hs[0] // 单 Hunk（常见于大文件整段修改）省掉全量 Map
+  const id = rowHunkIndex.value.get(ri)
+  return id == null ? null : hs.find(h => h.id === id) || null
+}
+// 行视觉：行级标记 ∪ 显式 reviewed Hunk 的全部行（Hunk 级标记后整段置灰，无需逐行点）。
+const reviewedRowSet = computed(() => {
+  const set = new Set(reviewedMarks.value)
+  const hunks = (reviewFile.value && reviewFile.value.hunks) || {}
+  for (const h of hunkSpans.value) {
+    if (hunks[h.id] === REVIEW_STATUS.REVIEWED) for (const ri of h.rows) set.add(ri)
+  }
+  return set
+})
+const hunkReviewStats = computed(() => {
+  const marked = reviewedMarks.value
+  const hunks = (reviewFile.value && reviewFile.value.hunks) || {}
+  let done = 0
+  for (const h of hunkSpans.value) {
+    if (hunks[h.id] === REVIEW_STATUS.REVIEWED || h.rows.every(ri => marked.has(ri))) done++
+  }
+  return { done, total: hunkSpans.value.length }
+})
+// 每个 Hunk 的已审状态只算一次；行模板按行调用 isHunkReviewed 时 O(1) 查表，
+// 避免大文件（单 Hunk 10 万行）每个可见行都遍历全部行（29×200k）把首帧拖到分钟级。
+const hunkReviewedById = computed(() => {
+  const marked = reviewedMarks.value
+  const hunks = (reviewFile.value && reviewFile.value.hunks) || {}
+  const map = new Map()
+  for (const h of hunkSpans.value) {
+    map.set(h.id, hunks[h.id] === REVIEW_STATUS.REVIEWED || h.rows.every(ri => marked.has(ri)))
+  }
+  return map
+})
+const reviewProgressText = computed(() => t('rv.progress', { done: hunkReviewStats.value.done, total: hunkReviewStats.value.total }))
+function isHunkReviewed(ri) {
+  const h = hunkAtRow(ri)
+  if (!h) return false
+  return !!hunkReviewedById.value.get(h.id)
+}
+function syncReviewForCurrentFile() {
+  const key = curFileKey.value
+  if (!key || !state.job) return
+  const spans = hunkSpans.value
+  const existing = reviewFile.value || {}
+  const lines = Array.isArray(existing.lines) ? existing.lines : []
+  const derived = deriveHunkStatuses(spans, lines)
+  const hunks = { ...(existing.hunks || {}) }
+  const validIds = new Set(spans.map(h => h.id))
+  for (const id of Object.keys(hunks)) if (!validIds.has(id)) delete hunks[id]
+  for (const [id, st] of Object.entries(derived)) {
+    if (!hunks[id] || hunks[id] === REVIEW_STATUS.UNREVIEWED) hunks[id] = st
+  }
+  if (existing.hunkTotal === spans.length && JSON.stringify(existing.hunks || {}) === JSON.stringify(hunks)) return
+  updateReviewFileState(key, { hunkTotal: spans.length, hunks, lines })
+}
+function toggleReviewed(ri) {
+  if (ri == null || ri < 0) return
+  const lines = new Set(reviewedMarks.value)
+  const hunks = { ...((reviewFile.value && reviewFile.value.hunks) || {}) }
+  const h = hunkAtRow(ri)
+  if (lines.has(ri)) {
+    lines.delete(ri)
+    if (h) delete hunks[h.id]
+  } else {
+    lines.add(ri)
+    if (h && h.rows.every(r => lines.has(r))) hunks[h.id] = REVIEW_STATUS.REVIEWED
+  }
+  updateReviewFileState(curFileKey.value, {
+    hunkTotal: hunkSpans.value.length,
+    lines: [...lines],
+    hunks
+  })
+}
+function toggleHunkReviewed(ri) {
+  const h = hunkAtRow(ri)
+  if (!h) return
+  const lines = new Set(reviewedMarks.value)
+  const hunks = { ...((reviewFile.value && reviewFile.value.hunks) || {}) }
+  const currently = isHunkReviewed(ri)
+  if (currently) {
+    for (const r of h.rows) lines.delete(r)
+    delete hunks[h.id]
+  } else {
+    for (const r of h.rows) lines.add(r)
+    hunks[h.id] = REVIEW_STATUS.REVIEWED
+  }
+  updateReviewFileState(curFileKey.value, {
+    hunkTotal: hunkSpans.value.length,
+    lines: [...lines],
+    hunks
+  })
+}
+function toggleFileReviewed() {
+  if (!curFileKey.value) return
+  const cur = reviewFile.value
+  const manualReviewed = !!(cur && cur.manualOverride && cur.status === REVIEW_STATUS.REVIEWED)
+  updateReviewFileState(curFileKey.value, {
+    hunkTotal: hunkSpans.value.length,
+    manualOverride: !manualReviewed,
+    status: manualReviewed ? REVIEW_STATUS.UNREVIEWED : REVIEW_STATUS.REVIEWED
+  })
+}
+function clearReviewed() {
+  if (!curFileKey.value) return
+  updateReviewFileState(curFileKey.value, {
+    hunkTotal: hunkSpans.value.length,
+    lines: [],
+    hunks: {},
+    manualOverride: false,
+    status: REVIEW_STATUS.UNREVIEWED
+  })
+}
+
+// ---------------- T06221 备注 / 书签 / 证据 ----------------
+// 目标解析：文件级 / Hunk / 行；行下标沿用 files[key].lines 的对齐行下标。
+// 快照（旧/新行号、变更前后文本、Hunk 头）随备注/书签落盘，后续重比对仍能生成可读证据。
+const reviewScope = ref('file')
+const reviewTargetRow = ref(-1)
+const noteEditor = ref({ open: false, target: null, note: null })
+const activeReviewRow = computed(() => currentRowIdx.value >= 0 ? currentRowIdx.value : reviewTargetRow.value)
+const effectiveReviewScope = computed(() => {
+  if (reviewScope.value === 'file') return 'file'
+  return activeReviewRow.value >= 0 ? reviewScope.value : 'file'
+})
+const fileNotes = computed(() => normalizeFileNotes(reviewFile.value && reviewFile.value.notes))
+const fileBookmarks = computed(() => normalizeFileBookmarks(reviewFile.value && reviewFile.value.bookmarks))
+const fileNoteCount = computed(() => fileNotes.value.length)
+const fileBookmarkCount = computed(() => fileBookmarks.value.length)
+
+function hunkHeaderOf(h) {
+  if (!h || !h.rows || !h.rows.length) return ''
+  const rs = rows.value
+  const olds = h.rows.map(i => Number(rs[i] && rs[i].left)).filter(n => Number.isFinite(n) && n > 0)
+  const news = h.rows.map(i => Number(rs[i] && rs[i].right)).filter(n => Number.isFinite(n) && n > 0)
+  return '@@ -' + (olds.length ? Math.min(...olds) : 0) + ',' + olds.length +
+    ' +' + (news.length ? Math.min(...news) : 0) + ',' + news.length + ' @@'
+}
+function hunkSnapshot(h) {
+  if (!h) return { before: '', after: '' }
+  const rs = rows.value
+  const changed = h.rows.map(i => rs[i]).filter(Boolean)
+  return {
+    before: changed.map(r => r.leftText || '').filter(Boolean).slice(0, 6).join('\n'),
+    after: changed.map(r => r.rightText || '').filter(Boolean).slice(0, 6).join('\n')
+  }
+}
+function targetForRow(ri, scope = 'line') {
+  const key = curFileKey.value
+  const s = normalizeNoteScope(scope)
+  if (!key) return null
+  if (s === 'file') {
+    return {
+      fileKey: key, path: key, scope: 'file', hunkId: null, line: null,
+      targetKey: noteTargetKey('file'), oldLine: '', newLine: '', change: 'file',
+      hunkHeader: '', before: '', after: ''
+    }
+  }
+  const r = rows.value[ri]
+  const h = hunkAtRow(ri)
+  if (!r || !h) return targetForRow(ri, 'file')
+  const snap = hunkSnapshot(h)
+  const base = {
+    fileKey: key, path: key, hunkId: h.id, hunkHeader: hunkHeaderOf(h),
+    user: (state.review && state.review.user) || ''
+  }
+  if (s === 'hunk') {
+    return {
+      ...base, scope: 'hunk', line: null,
+      targetKey: noteTargetKey('hunk', { hunkId: h.id }),
+      oldLine: '', newLine: '',
+      change: 'hunk', before: snap.before, after: snap.after
+    }
+  }
+  return {
+    ...base, scope: 'line', line: ri,
+    targetKey: noteTargetKey('line', { line: ri }),
+    oldLine: r.left || '', newLine: r.right || '',
+    change: r.type || '', before: r.leftText || '', after: r.rightText || ''
+  }
+}
+const activeReviewTarget = computed(() => targetForRow(activeReviewRow.value, effectiveReviewScope.value))
+const activeNotes = computed(() => {
+  const t = activeReviewTarget.value
+  if (!t) return []
+  return notesForTarget(reviewFile.value, t)
+})
+const activeBookmark = computed(() => {
+  const t = activeReviewTarget.value
+  return t ? bookmarkForTarget(reviewFile.value, t) : null
+})
+const reviewTargetText = computed(() => {
+  const tgt = activeReviewTarget.value
+  if (!tgt) return ''
+  if (tgt.scope === 'file') return t('rv.target.file')
+  if (tgt.scope === 'hunk') return t('rv.target.hunk', { id: tgt.hunkId })
+  return t('rv.target.line', { old: tgt.oldLine || '—', new: tgt.newLine || '—' })
+})
+function rowNotes(ri) {
+  const t = targetForRow(ri, 'line')
+  return t ? notesForTarget(reviewFile.value, t) : []
+}
+function hunkNotes(ri) {
+  const t = targetForRow(ri, 'hunk')
+  return t ? notesForTarget(reviewFile.value, t) : []
+}
+function rowBookmarked(ri) {
+  const t = targetForRow(ri, 'line')
+  return t ? isReviewBookmarked(curFileKey.value, t) : false
+}
+function noteCountAtRow(ri) {
+  return rowNotes(ri).length
+}
+
+function openNoteEditor(target, note = null) {
+  if (!target) return
+  noteEditor.value = { open: true, target, note: note || null }
+}
+function openNoteForActive() {
+  openNoteEditor(activeReviewTarget.value, activeNotes.value[0] || null)
+}
+function openNoteForRow(ri, scope = 'line') {
+  const target = targetForRow(ri, scope)
+  if (!target) return
+  reviewTargetRow.value = ri
+  openNoteEditor(target, notesForTarget(reviewFile.value, target)[0] || null)
+}
+function editExistingNote(note) {
+  if (!note) return
+  const target = targetForRow(note.line == null ? -1 : note.line, note.scope)
+  openNoteEditor(target || {
+    ...note, fileKey: curFileKey.value, path: curFileKey.value
+  }, note)
+}
+function closeNoteEditor() {
+  noteEditor.value = { ...noteEditor.value, open: false }
+}
+function onSaveNote(payload) {
+  const target = noteEditor.value.target
+  if (!target) return
+  const res = saveReviewNote(curFileKey.value, {
+    id: noteEditor.value.note && noteEditor.value.note.id,
+    text: payload && payload.text,
+    tag: payload && payload.tag,
+    target
+  })
+  if (!res.ok) {
+    toast('danger', t(res.errorKey || 'rv.note.empty'))
+    return
+  }
+  toast('success', t('rv.note.saved'))
+  closeNoteEditor()
+}
+function onDeleteNote() {
+  const note = noteEditor.value.note
+  if (!note) return
+  deleteReviewNote(curFileKey.value, note.id)
+  toast('success', t('rv.note.deleted'))
+  closeNoteEditor()
+}
+function toggleBookmarkForTarget(target) {
+  if (!target) return
+  const res = toggleReviewBookmarkState(curFileKey.value, target)
+  toast('success', t(res.active ? 'rv.bookmark.added' : 'rv.bookmark.removed'))
+}
+function toggleBookmarkActive() {
+  toggleBookmarkForTarget(activeReviewTarget.value)
+}
+function toggleBookmarkRow(ri) {
+  toggleBookmarkForTarget(targetForRow(ri, 'line'))
+}
+function toggleBookmarkHunk(ri) {
+  toggleBookmarkForTarget(targetForRow(ri, 'hunk'))
+}
+
+async function copyMarkdownText(text) {
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    return true
+  } catch (_) {
+    return false
+  }
+}
+async function copyEvidenceForTarget(target, notes = []) {
+  if (!target) return
+  const md = buildEvidenceMarkdown(curFileKey.value, target, { notes })
+  const ok = await copyMarkdownText(md)
+  toast(ok ? 'success' : 'danger', t(ok ? 'rv.evidence.copied' : 'rv.evidence.copyFail', { n: md.length }))
+}
+async function copyEvidenceFromSelection() {
+  if (!curFileKey.value) return
+  if (selRows.value.size) {
+    const targets = [...selRows.value].sort((a, b) => a - b)
+      .map(ri => targetForRow(ri, 'line')).filter(Boolean)
+    if (targets.length) {
+      await copyEvidenceForTarget({ targets }, [])
+      return
+    }
+  }
+  const target = activeReviewTarget.value
+  await copyEvidenceForTarget(target, activeNotes.value)
+}
+async function copyEvidenceFromEditor() {
+  const target = noteEditor.value.target
+  const note = noteEditor.value.note
+  await copyEvidenceForTarget(target, note ? [note] : notesForTarget(reviewFile.value, target))
 }
 
 // 折叠未变（collapse）后用于渲染的行集合；fold 行无 _i。
@@ -299,6 +697,8 @@ function startParse() {
 // 边缘情况：全 ctx 文件无变化行，collapse 折叠会吞掉全部内容，此时强制不折叠。
 const foldedRows = computed(() => {
   if (!rows.value.length) return []
+  // 无 ctx 行（全增/全删/全改）时折叠无意义，直接复用 rows，避免为 10 万+ 行再复制一遍对象。
+  if (!rows.value.some(r => r.type === 'ctx')) return rows.value
   if (diffOnly.value) return foldContext(rows.value, true, 0)
   const hasChanges = rows.value.some(r => r.type === 'del' || r.type === 'add' || r.type === 'rep')
   return foldContext(rows.value, collapse.value && hasChanges, foldWin.value)
@@ -314,7 +714,15 @@ const diffRows = computed(() => {
   }
   return out
 })
-const diffCount = computed(() => diffRows.value.length)
+const diffCount = computed(() => {
+  let n = 0
+  const rs = rows.value
+  for (let i = 0; i < rs.length; i++) {
+    const t = rs[i].type
+    if (t === 'rep' || t === 'del' || t === 'add') n++
+  }
+  return n
+})
 
 // ======================================================================
 // 行内差异 + 语法高亮：仅对「可见行」惰性计算并缓存（不在全量行上跑，避免大文件卡顿）。
@@ -629,6 +1037,8 @@ function onUniClick(e, v) {
   if (!p) return
   const ri = uniAbsToRi(v.abs)
   if (ri < 0) return
+  reviewTargetRow.value = ri
+  if (reviewScope.value === 'file') reviewScope.value = 'line'
   const side = uniSideOf(v)
   caretPos.value = { ri, side, col0: p.col0 }
   hoverPos.value = { ri, side, col0: p.col0 }
@@ -672,10 +1082,23 @@ function measureVisible() {
 }
 
 // 滚动：更新 scrollTop / viewportH（wrap 单容器；nowrap 双栏共用同一 scrollTop）
+function rememberTabScroll() {
+  if (at.value) at.value.scroll = scrollTop.value
+}
+function applyPendingScroll() {
+  const top = pendingScroll.value
+  if (top <= 0) return
+  const target = gitMode.value ? uniAreaRef.value : (wrap.value ? diffAreaRef.value : (leftPaneRef.value || rightPaneRef.value))
+  if (!target) return
+  target.scrollTop = top
+  if (!wrap.value && leftPaneRef.value && rightPaneRef.value) rightPaneRef.value.scrollTop = leftPaneRef.value.scrollTop
+  scrollTop.value = target.scrollTop
+}
 function onDiffScroll(e) {
   const el = e.target
   scrollTop.value = el.scrollTop
   viewportH.value = el.clientHeight
+  rememberTabScroll()
 }
 let paneSyncing = false
 function onPaneScroll(side) {
@@ -685,6 +1108,7 @@ function onPaneScroll(side) {
   if (!src || !dst) return
   scrollTop.value = src.scrollTop
   viewportH.value = src.clientHeight
+  rememberTabScroll()
   paneSyncing = true
   dst.scrollTop = src.scrollTop
   requestAnimationFrame(() => { paneSyncing = false })
@@ -700,6 +1124,11 @@ const pathKey = computed(() => {
   const t = activeTab.value
   return (t && ((t.node && t.node.key) || t.key)) || ''
 })
+// T06226：配置类文件（properties/yaml/xml/json）在文件栏提供「原始 Diff / 语义 Diff」切换。
+const configKind = computed(() => configKindOf(pathKey.value))
+const configMode = ref('raw')
+watch(configKind, () => { configMode.value = 'raw' })
+watch(() => dec.value && dec.value.ok, (ok) => { if (!ok) configMode.value = 'raw' })
 // folder 模式的磁盘根（按差异状态选侧，与 DiffTree.diskRootOf 一致）：ADDED → 右根，其余 → 左根。
 // 归档内部条目位于压缩包内，无磁盘路径 → 返回 ''（PathBar 编辑框退化为相对 key）。
 const diskRoot = computed(() => {
@@ -766,7 +1195,14 @@ function onKey(e) {
 }
 
 // 中键关闭 tab；左键点 tab 文字切激活，点 x 关闭；右键打开 tab 上下文菜单。
-function onTabClick(key) { state.activeKey = key }
+function onTabClick(key) {
+  if (key === state.activeKey) return
+  rememberTabScroll()
+  state.activeKey = key
+  // UI-06 恢复会话：tab 元数据已恢复但源码未加载时，点击按需反编译。
+  const tab = tabs.value.find(t => t.key === key)
+  if (tab && !tab.decompile && !tab.busy) ensureTabLoaded(tab.key, tab.node)
+}
 function onTabClose(e, key) { e.stopPropagation(); closeTab(key) }
 function onTabMouseDown(e, key) {
   if (e.button === 1) { e.preventDefault(); closeTab(key) } // 中键关闭
@@ -1015,6 +1451,8 @@ function onRowMove(e, v) {
 function onRowClick(e, v) {
   const p = locateCell(e, v)
   if (!p) return
+  reviewTargetRow.value = v.ri
+  if (reviewScope.value === 'file') reviewScope.value = 'line'
   caretPos.value = { ri: v.ri, side: p.side, col0: p.col0 }
   hoverPos.value = { ...p, ri: v.ri }
 }
@@ -1199,7 +1637,7 @@ function setupObserver() {
   if (!el) return
   // 环境无 ResizeObserver（jsdom 测试 / 极老 WebView）时跳过动态测高：行高沿用估算值，
   // 虚拟滚动仍可工作（offsets 按 EST_ROW_H 等差），仅换行多行测高回填失效。
-  if (typeof ResizeObserver === 'undefined') return
+  if (IS_JSDOM || typeof ResizeObserver === 'undefined') return
   viewportH.value = el.clientHeight || viewportH.value
   ro = new ResizeObserver(() => {
     const c = gitMode.value ? uniAreaRef.value : (wrap.value ? diffAreaRef.value : (leftPaneRef.value || rightPaneRef.value))
@@ -1216,11 +1654,13 @@ watch([wrap, gitMode], () => { nextTick(setupObserver) })
 
 onMounted(() => {
   window.addEventListener('keydown', onKey)
+  document.addEventListener('click', onOverflowDocClick, true)
   measureCharWidth()
   nextTick(setupObserver)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', onKey)
+  document.removeEventListener('click', onOverflowDocClick, true)
   if (flashTimer) { clearTimeout(flashTimer); flashTimer = null }
   if (ro) { ro.disconnect(); ro = null }
 })
@@ -1228,7 +1668,7 @@ onUpdated(() => measureVisible())
 </script>
 
 <template>
-  <div class="col-center" :data-fc="currentFc"
+  <div class="col-center" :data-fc="currentFc" :data-diff-palette="state.diffPalette"
        :style="{ '--dt-accent': currentFcMeta.accent, ...hlVars }">
     <!--
       tab 栏：始终渲染，避免 0/1 tab 时这层"忽隐忽现"导致用户找不到。
@@ -1239,7 +1679,7 @@ onUpdated(() => measureVisible())
       </span>
       <ul class="nav nav-tabs dvt-tabs" role="tablist">
         <template v-if="tabs.length">
-          <li v-for="tab in tabs" :key="tab.key" class="nav-item dvt-tab" role="presentation">
+          <li v-for="tab in visibleTabs" :key="tab.key" class="nav-item dvt-tab" role="presentation">
             <button class="nav-link d-flex align-items-center gap-1"
                     :class="{active: state.activeKey === tab.key}"
                     :aria-label="fullKey(tab)" :title="fullKey(tab)"
@@ -1257,6 +1697,33 @@ onUpdated(() => measureVisible())
               <span v-if="tab.busy && !tab.decompile" class="spinner-border spinner-border-sm ms-1" role="status" aria-hidden="true" style="width:.7rem;height:.7rem"></span>
               <i class="bi bi-x dvt-close" role="button" :aria-label="t('common.close')" @click="onTabClose($event, tab.key)"></i>
             </button>
+          </li>
+          <li v-if="overflowTabs.length" class="nav-item dvt-tab-overflow" role="presentation">
+            <button ref="overflowToggleRef" class="nav-link dvt-overflow-toggle" type="button"
+                    :aria-label="t('dv.moreTabs', { n: overflowTabs.length })"
+                    :title="t('dv.moreTabs', { n: overflowTabs.length })"
+                    aria-haspopup="true" :aria-expanded="overflowOpen"
+                    @click.stop="overflowOpen ? closeOverflow() : openOverflow()"
+                    @keydown.down.prevent="openOverflow"
+                    @keydown.esc.stop.prevent="closeOverflow(true)">
+              <i class="bi bi-three-dots"></i>
+              <span class="dvt-overflow-count">+{{ overflowTabs.length }}</span>
+            </button>
+            <div v-if="overflowOpen" ref="overflowMenuRef" class="dvt-overflow-menu" role="menu" @click.stop
+                 @keydown.esc.stop.prevent="closeOverflow(true)">
+              <button v-for="tab in overflowTabs" :key="tab.key" type="button" class="dvt-overflow-item"
+                      :class="{ active: state.activeKey === tab.key }"
+                      role="menuitem" :title="fullKey(tab)"
+                      @click="onOverflowTab(tab.key)"
+                      @keydown.esc.stop.prevent="closeOverflow(true)"
+                      @contextmenu.prevent="overflowOpen = false; openTabCtx($event, tab)">
+                <i v-if="tab.pinned" class="bi bi-pin-angle-fill" style="font-size:.6rem"></i>
+                <i class="bi bi-circle-fill" style="font-size:.45rem" :style="{color: statusDot(tab.node && tab.node.status)}"></i>
+                <span class="text-truncate">{{ tabTitle(tab) }}</span>
+                <i class="bi bi-x dvt-close ms-auto" role="button" :aria-label="t('common.close')"
+                   @click.stop="onTabClose($event, tab.key); overflowOpen = false"></i>
+              </button>
+            </div>
           </li>
         </template>
         <li v-else class="nav-item dvt-tab-empty">
@@ -1280,10 +1747,32 @@ onUpdated(() => measureVisible())
       <span v-else class="path text-secondary">{{ t('pb.empty') }}</span>
       <span v-if="node" class="badge" :class="STATUS_CLS[node.status]">{{ STATUS_LABEL[node.status] }}</span>
       <span v-else-if="activeTab" class="badge text-bg-light border" :title="t('dv.archiveInner')">ARCHIVE-INNER</span>
+      <!-- T06226：配置类文件一键切换原始/语义 Diff；单按钮避免 1280px 文件栏横向溢出 -->
+      <button v-if="configKind && dec && dec.ok" type="button" class="btn btn-sm py-0 px-2 cdv-switch"
+              :class="configMode === 'semantic' ? 'btn-primary' : 'btn-outline-primary'"
+              data-test="cd-toggle"
+              :aria-label="configMode === 'semantic' ? t('cd.raw') : t('cd.semantic')"
+              :title="configMode === 'semantic' ? t('cd.raw') : t('cd.toggle')"
+              @click="configMode = configMode === 'semantic' ? 'raw' : 'semantic'">
+        <i class="bi bi-braces-asterisk"></i> {{ configMode === 'semantic' ? t('cd.raw') : t('cd.semantic') }}
+      </button>
       <span class="badge fc-badge" v-if="node"
-            :style="{ color: currentFcMeta.accent, borderColor: currentFcMeta.accent + '66', background: 'color-mix(in srgb, ' + currentFcMeta.accent + ' 12%, transparent)' }"
+            :style="{ color: currentFcMeta.accent, borderColor: 'color-mix(in srgb, ' + currentFcMeta.accent + ' 40%, transparent)', background: 'color-mix(in srgb, ' + currentFcMeta.accent + ' 12%, transparent)' }"
             :title="t('dt.fileType', { fc: fclassLabel(currentFc) })">
         <i class="bi" :class="currentFcMeta.icon"></i>{{ fclassLabel(currentFc) }}
+      </span>
+      <!-- T06218 文件级审阅徽标/进度：放在左侧信息区，避免挤占右侧操作按钮（1280px 无横向滚动，AC-04） -->
+      <span v-if="reviewFile" class="badge review-badge" :class="reviewStatusMeta.cls" :title="reviewStatusLabel">
+        <i class="bi" :class="reviewStatusMeta.icon"></i> {{ reviewStatusLabel }}
+        <span v-if="reviewManual" class="review-manual">· {{ t('rv.manual') }}</span>
+      </span>
+      <span v-if="hunkReviewStats.total" class="review-progress" :title="reviewProgressText">{{ reviewProgressText }}</span>
+      <!-- T06221 文件级备注/书签计数：与左树图标同源，跨会话由服务端审阅文档恢复 -->
+      <span v-if="fileNoteCount" class="review-file-mark" :title="t('rv.fileNotesTip', { n: fileNoteCount })">
+        <i class="bi bi-chat-left-text"></i> {{ fileNoteCount }}
+      </span>
+      <span v-if="fileBookmarkCount" class="review-file-mark review-file-bm" :title="t('rv.fileBookmarksTip', { n: fileBookmarkCount })">
+        <i class="bi bi-bookmark-fill"></i> {{ fileBookmarkCount }}
       </span>
       <!-- Git 短哈希徽标：左侧旧版（7 位 SHA-1 截断，缺失则 0000000 占位），右侧新版；
            类比 `git rev-parse --short=7`，两侧相同时合并为单色（说明此文件未变）。
@@ -1318,6 +1807,13 @@ onUpdated(() => measureVisible())
       <button v-if="hasReviewed" class="btn btn-sm btn-outline-secondary py-0 px-2 me-1" style="font-size:.78rem"
               @click="clearReviewed" :aria-label="t('dv.clearReviewed')" :title="t('dv.clearReviewed')">
         <i class="bi bi-check2-all"></i> {{ t('dv.clearReviewed') }}
+      </button>
+      <button v-if="curFileKey" class="btn btn-sm py-0 px-2 me-1" style="font-size:1.05rem"
+              :class="(reviewManual && reviewStatus === 'reviewed') ? 'btn-success' : 'btn-outline-success'"
+              @click="toggleFileReviewed"
+              :aria-label="(reviewManual && reviewStatus === 'reviewed') ? t('rv.unmarkFile') : t('rv.markFile')"
+              :title="(reviewManual && reviewStatus === 'reviewed') ? t('rv.unmarkFile') : t('rv.markFile')">
+        <i class="bi" :class="(reviewManual && reviewStatus === 'reviewed') ? 'bi-check-circle-fill' : 'bi-check2-circle'"></i>
       </button>
       <!-- R2 行级选中操作条：复制选中行（可含行号前缀）/ 清除选择；Ctrl+C / Esc 同效 -->
       <div class="btn-group btn-group-sm me-1" v-if="selRows.size" role="group" :aria-label="t('dv.selGroup')">
@@ -1392,22 +1888,74 @@ onUpdated(() => measureVisible())
       <!-- 差异行快速定位：上一处 / 下一处（仅 add/del 算差异行） -->
       <div class="btn-group btn-group-sm ms-1" role="group" :aria-label="t('dv.navGroup')">
         <button class="btn btn-outline-secondary py-0 px-2" style="font-size:1.05rem"
-                @click="gotoPrev" :disabled="!diffRows.length" :aria-label="t('dv.gotoPrev')" :title="t('dv.gotoPrev')">
+                @click="gotoPrev" :disabled="!diffCount" :aria-label="t('dv.gotoPrev')" :title="t('dv.gotoPrev')">
           <i class="bi bi-chevron-up"></i>
         </button>
         <span class="btn btn-outline-secondary py-0 px-2 disabled d-flex align-items-center justify-content-center" style="font-size:.72rem;pointer-events:none;min-width:3.2rem;flex-shrink:0;font-variant-numeric:tabular-nums">
           {{ diffCount ? curIdx + 1 : 0 }}/{{ diffCount }}
         </span>
         <button class="btn btn-outline-secondary py-0 px-2" style="font-size:1.05rem"
-                @click="gotoNext" :disabled="!diffRows.length" :aria-label="t('dv.gotoNext')" :title="t('dv.gotoNext')">
+                @click="gotoNext" :disabled="!diffCount" :aria-label="t('dv.gotoNext')" :title="t('dv.gotoNext')">
           <i class="bi bi-chevron-down"></i>
         </button>
       </div>
       </div>
     </div>
 
+    <!-- T06221 审阅操作条：文件/Hunk/行级备注、一键书签、复制证据（AC-12） -->
+    <div class="review-actionbar" v-if="curFileKey && state.job">
+      <span class="rv-target" :title="reviewTargetText"><i class="bi bi-bullseye"></i> {{ reviewTargetText }}</span>
+      <select v-model="reviewScope" class="form-select form-select-sm rv-scope"
+              :aria-label="t('rv.scope.label')" :title="t('rv.scope.label')">
+        <option value="file">{{ t('rv.scope.file') }}</option>
+        <option value="hunk" :disabled="activeReviewRow < 0">{{ t('rv.scope.hunk') }}</option>
+        <option value="line" :disabled="activeReviewRow < 0">{{ t('rv.scope.line') }}</option>
+      </select>
+      <div class="btn-group btn-group-sm rv-actions" role="group" :aria-label="t('rv.actions.group')">
+        <button type="button" class="btn btn-outline-primary" @click="openNoteForActive"
+                :aria-label="t('rv.note.action')" :title="t('rv.note.action')">
+          <i class="bi bi-chat-left-text"></i> {{ t('rv.note.action') }}
+          <span v-if="activeNotes.length" class="badge text-bg-primary ms-1">{{ activeNotes.length }}</span>
+        </button>
+        <button type="button" class="btn" :class="activeBookmark ? 'btn-primary' : 'btn-outline-primary'"
+                @click="toggleBookmarkActive"
+                :aria-label="activeBookmark ? t('rv.bookmark.remove') : t('rv.bookmark.add')"
+                :title="activeBookmark ? t('rv.bookmark.remove') : t('rv.bookmark.add')">
+          <i class="bi" :class="activeBookmark ? 'bi-bookmark-fill' : 'bi-bookmark'"></i>
+          {{ t('rv.bookmark.action') }}
+        </button>
+        <button type="button" class="btn btn-outline-primary" @click="copyEvidenceFromSelection"
+                :aria-label="t('rv.evidence.action')" :title="t('rv.evidence.action')">
+          <i class="bi bi-clipboard"></i> {{ t('rv.evidence.action') }}
+        </button>
+      </div>
+      <span class="rv-note-chips" v-if="fileNotes.length">
+        <button v-for="n in fileNotes" :key="n.id" type="button" class="rv-note-chip"
+                :class="'tag-' + n.tag" :title="n.text" @click="editExistingNote(n)">
+          <i class="bi" :class="REVIEW_NOTE_TAG_META[n.tag] ? REVIEW_NOTE_TAG_META[n.tag].icon : 'bi-tag'"></i>
+          {{ t(REVIEW_NOTE_TAG_META[n.tag] ? REVIEW_NOTE_TAG_META[n.tag].labelKey : 'rv.note.tag.other') }}
+          {{ summarizeInline(n.text, 22) }}
+        </button>
+      </span>
+      <span v-else class="rv-empty-hint">{{ t('rv.note.emptyHint') }}</span>
+      <span class="flex-1"></span>
+      <span v-if="fileBookmarks.length" class="rv-bm-count" :title="t('rv.fileBookmarksTip', { n: fileBookmarkCount })">
+        <i class="bi bi-bookmark-fill"></i> {{ fileBookmarkCount }}
+      </span>
+    </div>
+
+    <ReviewNoteEditor :visible="noteEditor.open" :target="noteEditor.target" :note="noteEditor.note"
+                      @save="onSaveNote" @delete="onDeleteNote" @copy="copyEvidenceFromEditor" @close="closeNoteEditor" />
+
+    <!-- T06226：配置类文件切到语义视图时，用解析后的 key 路径 Diff 替代原始行 Diff -->
+    <div class="config-diff-area" v-if="configKind && configMode === 'semantic' && dec && dec.ok">
+      <ConfigDiffPanel :file-key="curFileKey" :kind="configKind"
+                       :old-text="dec.oldSource || ''" :new-text="dec.newSource || ''"
+                       @close="configMode = 'raw'" />
+    </div>
+
     <!-- 主体：反编译完成且差异解析完成 → 虚拟滚动渲染 -->
-    <div class="diff-area" v-if="(node || dec) && dec && dec.ok && parseStatus === 'done'">
+    <div class="diff-area" v-else-if="(node || dec) && dec && dec.ok && parseStatus === 'done'">
       <!-- 超大文件降级横幅：简洁视图提示 + 手动展开完整差异 -->
       <div class="oversized-banner" v-if="oversized && !forceFull">
         <i class="bi bi-speedometer2"></i>
@@ -1442,7 +1990,7 @@ onUpdated(() => measureVisible())
                 <span class="u-fold" role="button" tabindex="0" :title="foldLabel(v)" @click="onFoldClick" @keydown.enter="onFoldClick">{{ foldLabel(v) }}</span>
               </template>
               <template v-else>
-                <span class="u-sign" :class="'u-sign-' + v.kind">{{ v.kind === 'd' ? '−' : (v.kind === 'a' ? '+' : ' ') }}</span>
+                <span class="u-sign" :class="'u-sign-' + v.kind">{{ v.mod ? '≈' : (v.kind === 'd' ? '−' : (v.kind === 'a' ? '+' : ' ')) }}</span>
                 <span class="u-ln-old ln-pick" :class="{ 'u-ln-d': v.oldLn && v.kind === 'd' }" :title="t('dv.lnPick')" @click.stop="onLnClick($event, v.src, 'left')">{{ v.oldLn }}</span>
                 <span class="u-ln-new ln-pick" :class="{ 'u-ln-a': v.newLn && v.kind === 'a' }" :title="t('dv.lnPick')" @click.stop="onLnClick($event, v.src, 'right')">{{ v.newLn }}</span>
                 <span class="u-code" data-side="uni"><span v-for="(s, si) in v.segs" :key="si" :class="{'im-del': s.m && s.kind === 'del', 'im-add': s.m && s.kind === 'add'}"><template v-for="(t, ti) in s.toks" :key="ti"><span v-if="t.type !== 'ws' && t.type !== 'plain'" class="tok" :class="'tok-' + t.type">{{ t.text }}</span><template v-else>{{ t.text }}</template></template></span></span>
@@ -1465,7 +2013,7 @@ onUpdated(() => measureVisible())
         <div class="diff-scroll" ref="diffAreaRef" @scroll="onDiffScroll">
           <div class="diff-grid" :style="{ height: totalHeight + 'px' }">
           <div v-for="(v, k) in visibleRows" :key="v.ri >= 0 ? 'r' + v.ri : 'f' + v.abs"
-               class="row" :class="[v.type === 'fold' ? 'fold' : v.type, { current: v.ri === currentRowIdx, flash: v.ri === flashRi, selected: v.ri >= 0 && selRows.has(v.ri), findhit: findHitAbsSet.has(v.abs), findcur: v.abs === findCurrentAbs }]"
+               class="row" :class="[v.type === 'fold' ? 'fold' : v.type, { current: v.ri === currentRowIdx, flash: v.ri === flashRi, selected: v.ri >= 0 && selRows.has(v.ri), findhit: findHitAbsSet.has(v.abs), findcur: v.abs === findCurrentAbs, reviewed: v.ri >= 0 && reviewedRowSet.has(v.ri) }]"
                :data-ri="v.ri" :ref="el => setRowRef(v.abs, el, 'wrap')"
                @mousemove="onRowMove($event, v)" @click="onRowClick($event, v)"
                :style="{ position: 'absolute', top: offsets[v.abs] + 'px', left: '0', right: '0' }">
@@ -1475,10 +2023,10 @@ onUpdated(() => measureVisible())
                     @click="onFoldClick" @keydown.enter="onFoldClick">{{ foldLabel(v) }}</span>
             </template>
             <template v-else>
-              <span class="gt" :class="'gt-' + v.type"><i v-if="gtIcon(v, 'left')" class="bi" :class="gtIcon(v, 'left')"></i></span>
+              <span class="gt" :class="'gt-' + v.type"><template v-if="state.diffPalette === 'colorblind'">{{ gtSymbol(v, 'left') }}</template><i v-else-if="gtIcon(v, 'left')" class="bi" :class="gtIcon(v, 'left')"></i></span>
               <span class="ln ln-pick" :title="t('dv.lnPick')" @click.stop="onLnClick($event, v.abs, 'left')">{{ v.left }}</span>
               <span class="code flex-1" data-side="left"><span v-for="(s, si) in v.leftSegs" :key="si" :class="{'im-del': s.m && s.kind === 'del', 'im-add': s.m && s.kind === 'add'}"><template v-for="(t, ti) in s.toks" :key="ti"><span v-if="t.type !== 'ws' && t.type !== 'plain'" class="tok" :class="'tok-' + t.type">{{ t.text }}</span><template v-else>{{ t.text }}</template></template></span><span v-if="showCaret(v, 'left')" class="code-caret" :style="{ left: caretX(v, caretPos.col0) + 'px' }"></span></span>
-              <span class="gt" :class="'gt-' + v.type"><i v-if="gtIcon(v, 'right')" class="bi" :class="gtIcon(v, 'right')"></i></span>
+              <span class="gt" :class="'gt-' + v.type"><template v-if="state.diffPalette === 'colorblind'">{{ gtSymbol(v, 'right') }}</template><i v-else-if="gtIcon(v, 'right')" class="bi" :class="gtIcon(v, 'right')"></i></span>
               <span class="ln ln-pick" :title="t('dv.lnPick')" @click.stop="onLnClick($event, v.abs, 'right')">{{ v.right }}</span>
               <span class="code flex-1" data-side="right"><span v-for="(s, si) in v.rightSegs" :key="si" :class="{'im-del': s.m && s.kind === 'del', 'im-add': s.m && s.kind === 'add'}"><template v-for="(t, ti) in s.toks" :key="ti"><span v-if="t.type !== 'ws' && t.type !== 'plain'" class="tok" :class="'tok-' + t.type">{{ t.text }}</span><template v-else>{{ t.text }}</template></template></span><span v-if="showCaret(v, 'right')" class="code-caret" :style="{ left: caretX(v, caretPos.col0) + 'px' }"></span></span>
             </template>
@@ -1501,7 +2049,7 @@ onUpdated(() => measureVisible())
         <div class="diff-pane" ref="leftPaneRef" @scroll="onPaneScroll('left')">
           <div class="pane-grid" :style="{ height: totalHeight + 'px' }">
             <div v-for="(v, k) in visibleRows" :key="v.ri >= 0 ? 'r' + v.ri : 'f' + v.abs"
-                 class="prow" :class="[v.type === 'fold' ? 'fold' : v.type, { current: v.ri === currentRowIdx, flash: v.ri === flashRi, selected: v.ri >= 0 && selRows.has(v.ri), findhit: findHitAbsSet.has(v.abs), findcur: v.abs === findCurrentAbs, reviewed: v.ri >= 0 && reviewedMarks.has(v.ri) }]"
+                 class="prow" :class="[v.type === 'fold' ? 'fold' : v.type, { current: v.ri === currentRowIdx, flash: v.ri === flashRi, selected: v.ri >= 0 && selRows.has(v.ri), findhit: findHitAbsSet.has(v.abs), findcur: v.abs === findCurrentAbs, reviewed: v.ri >= 0 && reviewedRowSet.has(v.ri) }]"
                  :data-ri="v.ri" :ref="el => setRowRef(v.abs, el, 'left')"
                  @mousemove="onRowMove($event, v)" @click="onRowClick($event, v)"
                  :style="{ position: 'absolute', top: offsets[v.abs] + 'px', left: '0', right: '0', minHeight: (heights[v.abs] || EST_ROW_H) + 'px' }">
@@ -1511,7 +2059,7 @@ onUpdated(() => measureVisible())
                       @click="onFoldClick" @keydown.enter="onFoldClick">{{ foldLabel(v) }}</span>
               </template>
               <template v-else>
-                <span class="gt" :class="'gt-' + v.type"><i v-if="gtIcon(v, 'left')" class="bi" :class="gtIcon(v, 'left')"></i></span>
+                <span class="gt" :class="'gt-' + v.type"><template v-if="state.diffPalette === 'colorblind'">{{ gtSymbol(v, 'left') }}</template><i v-else-if="gtIcon(v, 'left')" class="bi" :class="gtIcon(v, 'left')"></i></span>
                 <span class="ln ln-pick" :title="t('dv.lnPick')" @click.stop="onLnClick($event, v.abs, 'left')">{{ v.left }}</span>
                 <!-- T01811 FR-015 gutter 操作（hover 浮出行号列）：复制到对侧仅 rep 行（del/add 需行号重排不支持）；已审阅任意差异行可标 -->
                 <span class="gt-ops" v-if="v.type === 'rep' || v.type === 'del' || v.type === 'add'">
@@ -1519,6 +2067,14 @@ onUpdated(() => measureVisible())
                           :aria-label="t('dv.copyToOther')" :title="t('dv.copyToOther')"><i class="bi bi-arrow-right-square"></i></button>
                   <button type="button" class="gt-op" @click.stop="toggleReviewed(v.ri)"
                           :aria-label="t('dv.markReviewed')" :title="t('dv.markReviewed')"><i class="bi bi-check2-circle"></i></button>
+                  <button type="button" class="gt-op" :class="{ on: isHunkReviewed(v.ri) }" @click.stop="toggleHunkReviewed(v.ri)"
+                          :aria-label="t('rv.markHunk')" :title="t('rv.markHunk')"><i class="bi bi-check2-all"></i></button>
+                  <button type="button" class="gt-op" :class="{ on: noteCountAtRow(v.ri) }" @click.stop="openNoteForRow(v.ri, 'line')"
+                          :aria-label="t('rv.note.row')" :title="t('rv.note.row')"><i class="bi bi-chat-left-text"></i></button>
+                  <button v-if="hunkAtRow(v.ri) && hunkAtRow(v.ri).startRow === v.ri" type="button" class="gt-op" :class="{ on: hunkNotes(v.ri).length }"
+                          @click.stop="openNoteForRow(v.ri, 'hunk')" :aria-label="t('rv.note.hunk')" :title="t('rv.note.hunk')"><i class="bi bi-chat-square-text"></i></button>
+                  <button type="button" class="gt-op" :class="{ on: rowBookmarked(v.ri) }" @click.stop="toggleBookmarkRow(v.ri)"
+                          :aria-label="t('rv.bookmark.row')" :title="t('rv.bookmark.row')"><i class="bi" :class="rowBookmarked(v.ri) ? 'bi-bookmark-fill' : 'bi-bookmark'"></i></button>
                 </span>
                 <span class="code flex-1" data-side="left"><span v-for="(s, si) in v.leftSegs" :key="si" :class="{'im-del': s.m && s.kind === 'del', 'im-add': s.m && s.kind === 'add'}"><template v-for="(t, ti) in s.toks" :key="ti"><span v-if="t.type !== 'ws' && t.type !== 'plain'" class="tok" :class="'tok-' + t.type">{{ t.text }}</span><template v-else>{{ t.text }}</template></template></span><span v-if="showCaret(v, 'left')" class="code-caret" :style="{ left: caretX(v, caretPos.col0) + 'px' }"></span></span>
               </template>
@@ -1531,7 +2087,7 @@ onUpdated(() => measureVisible())
         <div class="diff-pane right" ref="rightPaneRef" @scroll="onPaneScroll('right')">
           <div class="pane-grid" :style="{ height: totalHeight + 'px' }">
             <div v-for="(v, k) in visibleRows" :key="v.ri >= 0 ? 'r' + v.ri : 'f' + v.abs"
-                 class="prow" :class="[v.type === 'fold' ? 'fold' : v.type, { current: v.ri === currentRowIdx, flash: v.ri === flashRi, selected: v.ri >= 0 && selRows.has(v.ri), findhit: findHitAbsSet.has(v.abs), findcur: v.abs === findCurrentAbs, reviewed: v.ri >= 0 && reviewedMarks.has(v.ri) }]"
+                 class="prow" :class="[v.type === 'fold' ? 'fold' : v.type, { current: v.ri === currentRowIdx, flash: v.ri === flashRi, selected: v.ri >= 0 && selRows.has(v.ri), findhit: findHitAbsSet.has(v.abs), findcur: v.abs === findCurrentAbs, reviewed: v.ri >= 0 && reviewedRowSet.has(v.ri) }]"
                  :data-ri="v.ri" :ref="el => setRowRef(v.abs, el, 'right')"
                  @mousemove="onRowMove($event, v)" @click="onRowClick($event, v)"
                  :style="{ position: 'absolute', top: offsets[v.abs] + 'px', left: '0', right: '0', minHeight: (heights[v.abs] || EST_ROW_H) + 'px' }">
@@ -1541,13 +2097,21 @@ onUpdated(() => measureVisible())
                       @click="onFoldClick" @keydown.enter="onFoldClick">{{ foldLabel(v) }}</span>
               </template>
               <template v-else>
-                <span class="gt" :class="'gt-' + v.type"><i v-if="gtIcon(v, 'right')" class="bi" :class="gtIcon(v, 'right')"></i></span>
+                <span class="gt" :class="'gt-' + v.type"><template v-if="state.diffPalette === 'colorblind'">{{ gtSymbol(v, 'right') }}</template><i v-else-if="gtIcon(v, 'right')" class="bi" :class="gtIcon(v, 'right')"></i></span>
                 <span class="ln ln-pick" :title="t('dv.lnPick')" @click.stop="onLnClick($event, v.abs, 'right')">{{ v.right }}</span>
                 <span class="gt-ops" v-if="v.type === 'rep' || v.type === 'del' || v.type === 'add'">
                   <button v-if="v.type === 'rep'" type="button" class="gt-op" @click.stop="copyToOther(v.ri, 'right')"
                           :aria-label="t('dv.copyToOther')" :title="t('dv.copyToOther')"><i class="bi bi-arrow-left-square"></i></button>
                   <button type="button" class="gt-op" @click.stop="toggleReviewed(v.ri)"
                           :aria-label="t('dv.markReviewed')" :title="t('dv.markReviewed')"><i class="bi bi-check2-circle"></i></button>
+                  <button type="button" class="gt-op" :class="{ on: isHunkReviewed(v.ri) }" @click.stop="toggleHunkReviewed(v.ri)"
+                          :aria-label="t('rv.markHunk')" :title="t('rv.markHunk')"><i class="bi bi-check2-all"></i></button>
+                  <button type="button" class="gt-op" :class="{ on: noteCountAtRow(v.ri) }" @click.stop="openNoteForRow(v.ri, 'line')"
+                          :aria-label="t('rv.note.row')" :title="t('rv.note.row')"><i class="bi bi-chat-left-text"></i></button>
+                  <button v-if="hunkAtRow(v.ri) && hunkAtRow(v.ri).startRow === v.ri" type="button" class="gt-op" :class="{ on: hunkNotes(v.ri).length }"
+                          @click.stop="openNoteForRow(v.ri, 'hunk')" :aria-label="t('rv.note.hunk')" :title="t('rv.note.hunk')"><i class="bi bi-chat-square-text"></i></button>
+                  <button type="button" class="gt-op" :class="{ on: rowBookmarked(v.ri) }" @click.stop="toggleBookmarkRow(v.ri)"
+                          :aria-label="t('rv.bookmark.row')" :title="t('rv.bookmark.row')"><i class="bi" :class="rowBookmarked(v.ri) ? 'bi-bookmark-fill' : 'bi-bookmark'"></i></button>
                 </span>
                 <span class="code flex-1" data-side="right"><span v-for="(s, si) in v.rightSegs" :key="si" :class="{'im-del': s.m && s.kind === 'del', 'im-add': s.m && s.kind === 'add'}"><template v-for="(t, ti) in s.toks" :key="ti"><span v-if="t.type !== 'ws' && t.type !== 'plain'" class="tok" :class="'tok-' + t.type">{{ t.text }}</span><template v-else>{{ t.text }}</template></template></span><span v-if="showCaret(v, 'right')" class="code-caret" :style="{ left: caretX(v, caretPos.col0) + 'px' }"></span></span>
               </template>
@@ -1633,7 +2197,7 @@ onUpdated(() => measureVisible())
   color: var(--bs-secondary-color); display: flex; align-items: center; flex-wrap: wrap; gap: .3rem;
 }
 .oversized-banner b { color: var(--bs-body-color); }
-.diff-scroll { overflow: auto; flex: 1 1 auto; min-height: 0; position: relative; }
+.diff-scroll { overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0; position: relative; }
 /* 换行(wrap)模式热力条容器：横向 flex，左侧滚动区 + 右缘 .uni-heat 热力地图并排 */
 .diff-flex { display: flex; flex: 1 1 auto; min-height: 0; position: relative; }
 .diff-grid { position: relative; }
@@ -1660,8 +2224,8 @@ onUpdated(() => measureVisible())
   border-right: 1px solid var(--bs-border-color); user-select: none; color: var(--bs-secondary-color);
 }
 /* git 风格 +/- 标注：符号列随删/增行走红/绿，让 -/+ 在滚动时依旧可辨识（区别于中性内容行）。 */
-.urow.del .u-sign, .urow.rep-del .u-sign { background: rgba(248, 81, 73, 0.14); color: var(--bs-danger); font-weight: 700; }
-.urow.add .u-sign, .urow.rep-add .u-sign { background: rgba(46, 160, 67, 0.14); color: var(--bs-success); font-weight: 700; }
+.urow.del .u-sign, .urow.rep-del .u-sign { background: var(--bdf-diff-del-sign); color: var(--bs-danger); font-weight: 700; }
+.urow.add .u-sign, .urow.rep-add .u-sign { background: var(--bdf-diff-add-sign); color: var(--bs-success); font-weight: 700; }
 .urow .u-ln-old, .urow .u-ln-new {
   flex: 0 0 3.2rem; text-align: right; padding: 0 .4rem;
   position: sticky; z-index: 1;
@@ -1678,8 +2242,8 @@ onUpdated(() => measureVisible())
 }
 /* 差异行底色：删除(旧)红 / 新增(新)绿 / 修改段占位——只对内容与符号列刷淡底，行号列保持中性。
    Trae IDE 风格：与 split 模式同步，整行底色从 10% 降到 8% 极浅，避免与行内片段背景叠加产生糊状。 */
-.urow.del, .urow.rep-del { background: rgba(248, 81, 73, 0.10); }
-.urow.add, .urow.rep-add { background: rgba(46, 160, 67, 0.10); }
+.urow.del, .urow.rep-del { background: var(--bdf-diff-del-row); }
+.urow.add, .urow.rep-add { background: var(--bdf-diff-add-row); }
 .urow.fold { background: var(--bs-tertiary-bg); height: 21px; }
 .urow.fold .u-fold {
   flex: 1; align-self: center; text-align: center; font-size: .72rem;
@@ -1714,7 +2278,7 @@ onUpdated(() => measureVisible())
 .uni-heat-bar:hover { width: 12px; right: -1px; }
 .uni-heat-del { background: color-mix(in srgb, var(--bs-danger) 78%, transparent); }
 .uni-heat-add { background: color-mix(in srgb, var(--bs-success) 70%, transparent); }
-.uni-heat-add.uni-heat-del { background: color-mix(in srgb, #b45309 70%, transparent); }
+.uni-heat-add.uni-heat-del { background: color-mix(in srgb, var(--bdf-syntax-string) 70%, transparent); }
 .diff-split { flex: 1 1 auto; min-height: 0; display: flex; }
 .diff-pane { overflow: auto; flex: 1 1 0; min-width: 0; position: relative; }
 .diff-pane.right { border-left: 1px solid var(--bs-border-color); }
@@ -1737,13 +2301,10 @@ onUpdated(() => measureVisible())
   border-right: 1px solid var(--bs-border-color);
 }
 /* Trae 风格：变更行 gutter 用极浅同色底 + 主色灯泡，无饱和度叠加避免视觉重 */
-.row .gt.gt-add, .prow .gt.gt-add { background: rgba(46, 160, 67, 0.10); color: #1a7f37; }
-.row .gt.gt-del, .prow .gt.gt-del { background: rgba(248, 81, 73, 0.10); color: #cf222e; }
-.row .gt.gt-rep, .prow .gt.gt-rep { background: rgba(187, 128, 9, 0.10); color: #9a6700; }
-/* 暗色下沿用 GitHub dark 色板同款亮色文字（#3fb950/#f85149/#d29922），保证 WCAG AA 对比度 */
-[data-bs-theme="dark"] .row .gt.gt-add, [data-bs-theme="dark"] .prow .gt.gt-add { color: #3fb950; }
-[data-bs-theme="dark"] .row .gt.gt-del, [data-bs-theme="dark"] .prow .gt.gt-del { color: #f85149; }
-[data-bs-theme="dark"] .row .gt.gt-rep, [data-bs-theme="dark"] .prow .gt.gt-rep { color: #d29922; }
+.row .gt.gt-add, .prow .gt.gt-add { background: var(--bdf-diff-add-row); color: var(--bdf-diff-add-fg); }
+.row .gt.gt-del, .prow .gt.gt-del { background: var(--bdf-diff-del-row); color: var(--bdf-diff-del-fg); }
+.row .gt.gt-rep, .prow .gt.gt-rep { background: var(--bdf-diff-mod-sign); color: var(--bdf-diff-mod-fg); }
+/* 暗色下沿用 GitHub dark 色板同款亮色文字（var(--bdf-diff-add-fg)/var(--bdf-diff-del-fg)/var(--bdf-diff-mod-fg)），保证 WCAG AA 对比度 */
 .row:hover, .prow:hover { background: var(--bs-tertiary-bg); }
 /* T01811 FR-015 gutter 操作浮层：hover 行时浮出行号列上方（不挤占 grid 列），focus-within 保持键盘可达 */
 .prow .gt-ops {
@@ -1758,10 +2319,11 @@ onUpdated(() => measureVisible())
   padding: 2px 3px; cursor: pointer; border-radius: 3px;
 }
 .gt-op:hover { color: var(--bs-body-color); background: var(--bs-tertiary-bg); }
+.gt-op.on { color: var(--bs-success); border-color: var(--bs-success-border-subtle); background: var(--bs-success-bg-subtle); }
 /* 已审阅行：内容弱化置灰（视觉上「人工过目」），行号列打勾标识 */
-.prow.reviewed .code { opacity: .45; }
-.prow.reviewed .ln { color: var(--bs-success); }
-.prow.reviewed .ln::after { content: '\2713'; margin-left: .25rem; font-size: .68rem; }
+.prow.reviewed .code, .row.reviewed .code { opacity: .45; }
+.prow.reviewed .ln, .row.reviewed .ln { color: var(--bs-success); }
+.prow.reviewed .ln::after, .row.reviewed .ln::after { content: '\2713'; margin-left: .25rem; font-size: .68rem; }
 .row .ln, .prow .ln {
   text-align: right; padding: 0 .4rem;
   color: var(--bs-secondary-color);
@@ -1781,6 +2343,9 @@ onUpdated(() => measureVisible())
   cursor: text;         /* 提示可点击定位 */
   color: var(--bs-body-color); /* 锁定正文色，避免高亮背景影响文字可读性 */
 }
+/* P3：换行模式（.row）的长 token 强制在格内断行，并允许 grid 子项收缩到容器宽度，
+   否则 min-content 宽度会把 .diff-grid 撑宽，底部出现本不该有的横向滚动条。 */
+.row .code { min-width: 0; overflow-wrap: anywhere; }
 /* 光标定位：闪烁竖线（BCompare/编辑器风格），点击落下，位置 = 列号 × 等宽字符宽 */
 .code-caret {
   position: absolute;
@@ -1834,20 +2399,16 @@ onUpdated(() => measureVisible())
   white-space: nowrap;
 }
 /* 行内词/字符级差异高亮（对标 Beyond Compare / GitHub inline diff）：
-   Trae IDE 风格：行内差异片段用 IDE 同款极浅同色系（VS Code Deletion #ffebe9 / Addition #e6ffec），
+   Trae IDE 风格：行内差异片段用 IDE 同款极浅同色系（VS Code Deletion var(--bdf-diff-del-inline) / Addition var(--bdf-diff-add-inline)），
    不再叠加深色 box-shadow 描边（小字号下 1px inset 描边会与背景叠加产生「重影」）。
    文字保留 token 类型色（currentColor），让红/绿底上的语法层次自然透出，不再 color-mix 加深。 */
-.code .im-del { background: #ffebe9; border-radius: 2px; color: inherit; }
-.code .im-add { background: #e6ffec; border-radius: 2px; color: inherit; }
+.code .im-del { background: var(--bdf-diff-del-inline); border-radius: 2px; color: inherit; }
+.code .im-add { background: var(--bdf-diff-add-inline); border-radius: 2px; color: inherit; }
 /* Git 风格 unified 视图：内容区类名不是 .code 而是 .u-code，需为同样片段补同款高亮，
    否则 rep 行的词/字符级细分（im-del/im-add）匹配不到规则，粒度切换在 git 模式下无可见差异。
    颜色较 split 视图加深一档：unified 内容紧凑、行底淡色更易被区分需求淹没，加深红/绿便于一眼分辨差异位。 */
-.u-code .im-del { background: rgba(248, 81, 73, 0.38); border-radius: 2px; color: inherit; }
-.u-code .im-add { background: rgba(46, 160, 67, 0.36); border-radius: 2px; color: inherit; }
-[data-bs-theme="dark"] .code .im-del { background: rgba(248, 81, 73, 0.32); }
-[data-bs-theme="dark"] .code .im-add { background: rgba(46, 160, 67, 0.32); }
-[data-bs-theme="dark"] .u-code .im-del { background: rgba(248, 81, 73, 0.55); }
-[data-bs-theme="dark"] .u-code .im-add { background: rgba(46, 160, 67, 0.52); }
+.u-code .im-del { background: var(--bdf-diff-del-inline-uni); border-radius: 2px; color: inherit; }
+.u-code .im-add { background: var(--bdf-diff-add-inline-uni); border-radius: 2px; color: inherit; }
 /* 折叠占位行：类型色 + 斜体，提示被折叠段落归属；前置 ● 圆点表达"被收起"语义。
    圆点用当前文件类型色（--dt-accent），与 filebar 类型徽标呼应。 */
 .row.fold, .prow.fold { background: var(--bs-tertiary-bg); border-left: 3px solid var(--dt-accent, var(--bs-border-color)); }
@@ -1865,31 +2426,25 @@ onUpdated(() => measureVisible())
    文字继承正文色（inherited），让 token 类型色在淡色行底上自然透出，保持代码可读性。 */
 .row, .prow { box-shadow: inset 0 0 0 0 transparent; }
 .row.add, .prow.add {
-  background: rgba(46, 160, 67, 0.06);
-  box-shadow: inset 3px 0 0 #1a7f37;
+  background: var(--bdf-diff-add-row);
+  box-shadow: inset 3px 0 0 var(--bdf-diff-add-fg);
 }
-.row.add .ln, .prow.add .ln { color: #1a7f37; font-weight: 600; }
+.row.add .ln, .prow.add .ln { color: var(--bdf-diff-add-fg); font-weight: 600; }
 .row.add .ln:last-of-type { border-left: 1px solid var(--bs-border-color); }
 .row.del, .prow.del {
-  background: rgba(248, 81, 73, 0.06);
-  box-shadow: inset 3px 0 0 #cf222e;
+  background: var(--bdf-diff-del-row);
+  box-shadow: inset 3px 0 0 var(--bdf-diff-del-fg);
 }
-.row.del .ln, .prow.del .ln { color: #cf222e; font-weight: 600; }
+.row.del .ln, .prow.del .ln { color: var(--bdf-diff-del-fg); font-weight: 600; }
 /* BCompare 风格「替换行」：修改对同行左右对照，整体极淡橙底（VS Code modified 风格）+ 左侧 3px 橙条；
    行内 im-del/im-add 继续用 IDE 极浅色细分，差异片段不再加 inset 描边避免重影 */
 .row.rep, .prow.rep {
-  background: rgba(187, 128, 9, 0.06);
-  box-shadow: inset 3px 0 0 #9a6700;
+  background: var(--bdf-diff-mod-row);
+  box-shadow: inset 3px 0 0 var(--bdf-diff-mod-fg);
 }
-.row.rep .ln, .prow.rep .ln { color: #9a6700; font-weight: 600; }
+.row.rep .ln, .prow.rep .ln { color: var(--bdf-diff-mod-fg); font-weight: 600; }
 /* 暗色主题：整行底色降到 10%（更淡），只作"该行有变更"的轻提示——差异细节交给行内 im-del/im-add 片段
    （0.32 透明同色），否则「整行 0.16 + 片段 0.32」同色相叠会在大段修改区糊成深色斑块（视觉重影/字糊）。 */
-[data-bs-theme="dark"] .row.add, [data-bs-theme="dark"] .prow.add { background: rgba(46, 160, 67, 0.10); box-shadow: inset 3px 0 0 #3fb950; }
-[data-bs-theme="dark"] .row.add .ln, [data-bs-theme="dark"] .prow.add .ln { color: #3fb950; }
-[data-bs-theme="dark"] .row.del, [data-bs-theme="dark"] .prow.del { background: rgba(248, 81, 73, 0.10); box-shadow: inset 3px 0 0 #f85149; }
-[data-bs-theme="dark"] .row.del .ln, [data-bs-theme="dark"] .prow.del .ln { color: #f85149; }
-[data-bs-theme="dark"] .row.rep, [data-bs-theme="dark"] .prow.rep { background: rgba(187, 128, 9, 0.09); box-shadow: inset 3px 0 0 #d29922; }
-[data-bs-theme="dark"] .row.rep .ln, [data-bs-theme="dark"] .prow.rep .ln { color: #d29922; }
 /* split 模式 rep 行右 code 右缘虚线：强化「该行在另一侧有对应修改对」—— 比 .gt-rep 图标更显眼，
    也避免在长行/缩进行里看不到 gutter 图标。仅作用于 split 模式右栏，wrap/unified 模式无此需求。 */
 .diff-pane.right .prow.rep .code {
@@ -1902,19 +2457,19 @@ onUpdated(() => measureVisible())
  * 与整行底色、行内片段底色不混淆；diff 片段内的 token 用 color-mix 加深保证红/绿底可读。
  * 扩展：新增 token 类型时在此补 .tok-* 类；暗色主题可加 [data-bs-theme="dark"] .col-center 覆盖变量。 */
 .col-center {
-  --tok-kw: #7c3aed;   /* 关键字/控制流 */
-  --tok-str: #b45309;  /* 字符串 */
-  --tok-com: #64748b;  /* 注释/引用 */
-  --tok-num: #0891b2;  /* 数字/颜色值 */
-  --tok-id: #475569;   /* 标识符/变量/选择器 */
-  --tok-fn: #2563eb;   /* 函数调用 */
-  --tok-type: #0891b2; /* 类型/类名 */
-  --tok-tag: #be185d;  /* HTML 标签 */
-  --tok-attr: #0284c7; /* HTML/CSS 属性名 */
-  --tok-hd: #7c3aed;   /* Markdown 标题/强调 */
-  --tok-link: #2563eb; /* 链接 */
-  --tok-code: #b45309; /* 行内代码 */
-  --tok-op: #64748b;   /* 运算符/分隔符 */
+  --tok-kw: var(--bdf-syntax-keyword);   /* 关键字/控制流 */
+  --tok-str: var(--bdf-syntax-string);  /* 字符串 */
+  --tok-com: var(--bdf-syntax-comment);  /* 注释/引用 */
+  --tok-num: var(--bdf-syntax-number);  /* 数字/颜色值 */
+  --tok-id: var(--bdf-syntax-ident);   /* 标识符/变量/选择器 */
+  --tok-fn: var(--bdf-syntax-function);   /* 函数调用 */
+  --tok-type: var(--bdf-syntax-number); /* 类型/类名 */
+  --tok-tag: var(--bdf-syntax-tag);  /* HTML 标签 */
+  --tok-attr: var(--bdf-syntax-attr); /* HTML/CSS 属性名 */
+  --tok-hd: var(--bdf-syntax-keyword);   /* Markdown 标题/强调 */
+  --tok-link: var(--bdf-syntax-function); /* 链接 */
+  --tok-code: var(--bdf-syntax-string); /* 行内代码 */
+  --tok-op: var(--bdf-syntax-comment);   /* 运算符/分隔符 */
 }
 .tok-keyword { color: var(--tok-kw); }
 .tok-string { color: var(--tok-str); }
@@ -2014,6 +2569,54 @@ onUpdated(() => measureVisible())
   border-radius: .25rem;
 }
 .dvt-close:hover { opacity: 1; background: var(--bs-tertiary-bg); }
+
+/* UI-06：超过 8 个 tab 时折叠为「更多」菜单，菜单项保持键盘可达。 */
+.dvt-tab-overflow { position: relative; flex: 0 0 auto; }
+.dvt-overflow-toggle {
+  font-size: .78rem;
+  line-height: 1.2;
+  padding: .25rem .5rem;
+  color: var(--bs-secondary-color);
+  border: 1px dashed var(--bs-border-color);
+  border-radius: .375rem .375rem 0 0;
+  background: transparent;
+}
+.dvt-overflow-toggle:hover, .dvt-overflow-toggle[aria-expanded="true"] {
+  color: var(--bs-body-color);
+  background: var(--bs-body-bg);
+  border-style: solid;
+}
+.dvt-overflow-count { font-variant-numeric: tabular-nums; }
+.dvt-overflow-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 16rem;
+  max-width: min(28rem, 70vw);
+  max-height: 18rem;
+  overflow-y: auto;
+  padding: .25rem;
+  background: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
+  border-radius: .5rem;
+  box-shadow: var(--bs-box-shadow);
+}
+.dvt-overflow-item {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  width: 100%;
+  border: 0;
+  border-radius: .35rem;
+  padding: .35rem .5rem;
+  background: transparent;
+  color: var(--bs-body-color);
+  font-size: .78rem;
+  text-align: left;
+}
+.dvt-overflow-item:hover, .dvt-overflow-item.active { background: var(--bs-tertiary-bg); }
+.dvt-overflow-item .dvt-close { margin-left: auto; }
 .dvt-tab-empty .nav-link {
   font-size: .78rem;
   padding: .25rem .55rem;
@@ -2029,6 +2632,38 @@ onUpdated(() => measureVisible())
 
 /* ===== 文件类型视觉（IntelliJ 风格） ===== */
 .filebar-icon { font-size: 1.05rem; flex: 0 0 auto; }
+/* T06226 配置语义 Diff 切换：单按钮，避免 1280px 文件栏溢出 */
+.cdv-switch { font-size: .74rem; white-space: nowrap; flex: 0 0 auto; }
+.config-diff-area { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+/* T06221 文件栏备注/书签计数 + 审阅操作条 */
+.review-file-mark {
+  display: inline-flex; align-items: center; gap: .15rem; white-space: nowrap;
+  font-size: .7rem; color: var(--bs-secondary-color); border: 1px solid var(--bs-border-color);
+  border-radius: 999px; padding: .02rem .35rem;
+}
+.review-file-bm { color: var(--bs-primary); border-color: var(--bs-primary-border-subtle); background: var(--bs-primary-bg-subtle); }
+.review-actionbar {
+  display: flex; align-items: center; gap: .4rem; min-height: 2rem;
+  padding: .2rem .55rem; border-bottom: 1px solid var(--bs-border-color);
+  background: var(--bs-tertiary-bg); font-size: .75rem; overflow: hidden;
+}
+.rv-target { display: inline-flex; align-items: center; gap: .25rem; white-space: nowrap; color: var(--bs-secondary-color); }
+.rv-scope { width: auto; max-width: 7.5rem; font-size: .72rem; padding-top: 0; padding-bottom: 0; }
+.rv-actions .btn { font-size: .72rem; padding: .1rem .45rem; white-space: nowrap; }
+.rv-note-chips { display: flex; gap: .25rem; overflow: auto; max-width: 42%; scrollbar-width: thin; }
+.rv-note-chip {
+  border: 1px solid var(--bs-border-color); background: var(--bs-body-bg); color: var(--bs-body-color);
+  border-radius: 999px; padding: .02rem .42rem; font-size: .69rem; white-space: nowrap; max-width: 12rem;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.rv-note-chip i { font-size: .68rem; margin-right: .12rem; }
+.rv-note-chip.tag-risk { border-color: var(--bs-danger-border-subtle); color: var(--bs-danger); }
+.rv-note-chip.tag-confirm { border-color: var(--bs-warning-border-subtle); color: var(--bs-warning-text-emphasis); }
+.rv-note-chip.tag-compat { border-color: var(--bs-primary-border-subtle); color: var(--bs-primary); }
+.rv-note-chip.tag-config { border-color: var(--bs-info-border-subtle); color: var(--bs-info-text-emphasis); }
+.rv-empty-hint { color: var(--bs-secondary-color); font-size: .7rem; white-space: nowrap; }
+.rv-bm-count { display: inline-flex; align-items: center; gap: .15rem; color: var(--bs-primary); white-space: nowrap; }
+.flex-1 { flex: 1 1 auto; }
 .fc-badge {
   display: inline-flex; align-items: center; gap: .3rem;
   font-size: .68rem; font-weight: 600;
@@ -2068,11 +2703,11 @@ onUpdated(() => measureVisible())
 }
 /* Find 命中行级高亮：全部命中淡黄底，当前命中强化描边 */
 .row.findhit, .prow.findhit, .urow.findhit {
-  background-image: linear-gradient(color-mix(in srgb, #f5c542 16%, transparent), color-mix(in srgb, #f5c542 16%, transparent));
+  background-image: linear-gradient(color-mix(in srgb, var(--bdf-find-hit) 16%, transparent), color-mix(in srgb, var(--bdf-find-hit) 16%, transparent));
 }
 .row.findcur, .prow.findcur, .urow.findcur {
-  box-shadow: inset 3px 0 0 #e0a800;
-  background-image: linear-gradient(color-mix(in srgb, #f5c542 30%, transparent), color-mix(in srgb, #f5c542 30%, transparent));
+  box-shadow: inset 3px 0 0 var(--bdf-find-current);
+  background-image: linear-gradient(color-mix(in srgb, var(--bdf-find-hit) 30%, transparent), color-mix(in srgb, var(--bdf-find-hit) 30%, transparent));
 }
 /* 查找条：悬浮于 diff 区顶部，不挤占内容布局 */
 .find-bar {
@@ -2080,7 +2715,7 @@ onUpdated(() => measureVisible())
   display: flex; align-items: center; gap: .35rem;
   padding: .3rem .5rem; border-radius: .4rem;
   background: var(--bs-body-bg); border: 1px solid var(--bs-border-color);
-  box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .12);
+  box-shadow: 0 .25rem .75rem var(--bdf-shadow-pop);
 }
 .find-input { width: 16rem; font-size: .8rem; }
 .find-count { font-size: .72rem; min-width: 3.2rem; text-align: center; font-variant-numeric: tabular-nums; }
@@ -2102,5 +2737,79 @@ onUpdated(() => measureVisible())
 .bin-row { display: flex; justify-content: space-between; gap: 1rem; padding: .12rem 0; }
 .bin-k { color: var(--bs-secondary-color); flex: 0 0 auto; }
 
+/* ===== TH-03 色盲安全调色板 =====
+ * 语义不只靠红/绿：新增=蓝(+ / 右斜纹)、删除=橙(− / 左斜纹)、修改=紫(≈ / 竖纹)。
+ * 行底色保持与默认模式同级的淡度，避免纹理与代码正文争夺注意力。 */
+.col-center[data-diff-palette="colorblind"] {
+  --cb-add: var(--bdf-cb-add);
+  --cb-add-bg: var(--bdf-cb-add-bg);
+  --cb-add-sign: var(--bdf-cb-add-sign);
+  --cb-del: var(--bdf-cb-del);
+  --cb-del-bg: var(--bdf-cb-del-bg);
+  --cb-del-sign: var(--bdf-cb-del-sign);
+  --cb-mod: var(--bdf-cb-mod);
+  --cb-mod-bg: var(--bdf-cb-mod-bg);
+  --cb-mod-sign: var(--bdf-cb-mod-sign);
+}
+.col-center[data-diff-palette="colorblind"] .row.add,
+.col-center[data-diff-palette="colorblind"] .prow.add,
+.col-center[data-diff-palette="colorblind"] .urow.add,
+.col-center[data-diff-palette="colorblind"] .urow.rep-add {
+  background-color: var(--cb-add-bg);
+  box-shadow: inset 4px 0 0 var(--cb-add);
+}
+.col-center[data-diff-palette="colorblind"] .row.del,
+.col-center[data-diff-palette="colorblind"] .prow.del,
+.col-center[data-diff-palette="colorblind"] .urow.del,
+.col-center[data-diff-palette="colorblind"] .urow.rep-del {
+  background-color: var(--cb-del-bg);
+  box-shadow: inset 4px 0 0 var(--cb-del);
+}
+.col-center[data-diff-palette="colorblind"] .row.rep,
+.col-center[data-diff-palette="colorblind"] .prow.rep {
+  background-color: var(--cb-mod-bg);
+  box-shadow: inset 4px 0 0 var(--cb-mod);
+}
+.col-center[data-diff-palette="colorblind"] .row.add .ln,
+.col-center[data-diff-palette="colorblind"] .prow.add .ln,
+.col-center[data-diff-palette="colorblind"] .urow.add .u-ln-a { color: var(--cb-add); }
+.col-center[data-diff-palette="colorblind"] .row.del .ln,
+.col-center[data-diff-palette="colorblind"] .prow.del .ln,
+.col-center[data-diff-palette="colorblind"] .urow.del .u-ln-d { color: var(--cb-del); }
+.col-center[data-diff-palette="colorblind"] .row.rep .ln,
+.col-center[data-diff-palette="colorblind"] .prow.rep .ln { color: var(--cb-mod); }
+.col-center[data-diff-palette="colorblind"] .urow.del .u-sign,
+.col-center[data-diff-palette="colorblind"] .urow.rep-del .u-sign {
+  background: var(--cb-del-sign); color: var(--cb-del);
+}
+.col-center[data-diff-palette="colorblind"] .urow.add .u-sign,
+.col-center[data-diff-palette="colorblind"] .urow.rep-add .u-sign {
+  background: var(--cb-add-sign); color: var(--cb-add);
+}
+/* 非颜色线索：左缘斜纹条。新增右斜、删除左斜、修改竖纹，灰度打印/色盲下仍可区分。 */
+.col-center[data-diff-palette="colorblind"] .row,
+.col-center[data-diff-palette="colorblind"] .prow { position: relative; }
+.col-center[data-diff-palette="colorblind"] .row.add::before,
+.col-center[data-diff-palette="colorblind"] .prow.add::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; pointer-events: none;
+  background: repeating-linear-gradient(45deg, var(--cb-add) 0 2px, transparent 2px 5px);
+  opacity: .85;
+}
+.col-center[data-diff-palette="colorblind"] .row.del::before,
+.col-center[data-diff-palette="colorblind"] .prow.del::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; pointer-events: none;
+  background: repeating-linear-gradient(135deg, var(--cb-del) 0 2px, transparent 2px 5px);
+  opacity: .85;
+}
+.col-center[data-diff-palette="colorblind"] .row.rep::before,
+.col-center[data-diff-palette="colorblind"] .prow.rep::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; pointer-events: none;
+  background: repeating-linear-gradient(90deg, var(--cb-mod) 0 2px, transparent 2px 5px);
+  opacity: .85;
+}
+.col-center[data-diff-palette="colorblind"] .gt { font-weight: 700; font-family: var(--bs-font-monospace); }
+.col-center[data-diff-palette="colorblind"] .gt-add { color: var(--cb-add); }
+.col-center[data-diff-palette="colorblind"] .gt-del { color: var(--cb-del); }
+.col-center[data-diff-palette="colorblind"] .gt-rep { color: var(--cb-mod); }
 
 </style>

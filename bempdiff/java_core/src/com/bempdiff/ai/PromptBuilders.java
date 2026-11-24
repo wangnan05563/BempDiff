@@ -310,6 +310,12 @@ public final class PromptBuilders {
             p.append("请对以下JSP页面/标签文件改动做逐文件深读，返回 JSON：");
             p.append("改动意图(intent)、风险等级(risk: LOW/MEDIUM/HIGH)、影响范围(impact，含对页面渲染/请求处理/标签逻辑的潜在影响)、测试要点(testPoints数组)、contextInfluence（项目上下文如何影响本文件结论）。\n\n");
             p.append(FILE_HEADER).append(key).append(" （JSP 页面/标签）\n");
+        } else if (fc == FileClass.JAVA) {
+            p.append("请对以下 Java 源码文件改动做逐文件深读，返回 JSON：");
+            p.append("改动意图(intent)、风险等级(risk: LOW/MEDIUM/HIGH)、影响范围(impact，含对调用方/接口/业务逻辑的潜在影响)、测试要点(testPoints数组)、contextInfluence（项目上下文如何影响本文件结论）。\n\n");
+            p.append(FILE_HEADER).append(key).append(" （Java 源码）\n");
+            p.append("若改动涉及对外可见 API（public/protected 方法/字段/类签名）的移除或签名变更，")
+             .append("请在 impact 中给出迁移建议（旧调用 → 建议的新调用/写法；无直接替代时说明过渡方案）。\n\n");
         } else if (fc == FileClass.CONFIG) {
             p.append("请对以下配置文件（XML/Properties/YAML/JSON 等）改动做逐文件深读，返回 JSON：");
             p.append("改动意图(intent)、风险等级(risk: LOW/MEDIUM/HIGH)、影响范围(impact，含对配置项语义/模块行为/启动加载的潜在影响)、测试要点(testPoints数组)、contextInfluence（项目上下文如何影响本文件结论）。\n\n");
@@ -350,6 +356,7 @@ public final class PromptBuilders {
             case HTML: return "HTML 模板";
             case CSS: return "CSS 样式";
             case JSP: return "JSP 页面";
+            case JAVA: return "Java 源码";
             case CONFIG: return "配置文件";
             default: return "文本资源";
         }
@@ -363,6 +370,7 @@ public final class PromptBuilders {
         if (lower.endsWith(".css")) return FileClass.CSS;
         if (key.endsWith(".jsp") || key.endsWith(".jspx")
                 || key.endsWith(".tag") || key.endsWith(".tagx")) return FileClass.JSP;
+        if (lower.endsWith(".java")) return FileClass.JAVA;
         // .mf 与 PackageParser.classify 保持一致，让 AI 报告把 MANIFEST.MF 看作「配置文件」而非 nullptr
         if (lower.endsWith(".mf") || key.endsWith(".xml") || key.endsWith(".properties") || key.endsWith(".yml")
                 || key.endsWith(".yaml") || key.endsWith(".json") || key.endsWith(".conf")
