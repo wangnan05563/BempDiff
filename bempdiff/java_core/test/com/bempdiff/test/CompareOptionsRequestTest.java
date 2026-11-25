@@ -202,7 +202,6 @@ public final class CompareOptionsRequestTest {
         Asserts.assertTrue("含 com.a", prefixes.contains("com.a"));
         Asserts.assertTrue("含 com.c", prefixes.contains("com.c"));
         Asserts.assertTrue("expandInternalLib 映射 expandAll", c.isExpandInternalLib());
-        Asserts.assertTrue("expandAllForPlainJar 映射 expandAll", c.isExpandAllForPlainJar());
         Asserts.assertEquals("单条目上限固定 8MB", 8L * 1024 * 1024, c.getMaxEntryBytes());
         Asserts.assertEquals("忽略扩展名透传", 1, c.getIgnoreExtensions().size());
         Asserts.assertEquals("首个忽略项", ".log", c.getIgnoreExtensions().get(0));

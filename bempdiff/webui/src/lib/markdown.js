@@ -87,17 +87,19 @@ export function renderMarkdown(md) {
   while (i < lines.length) {
     const line = lines[i]
 
-    // 围栏代码块
-    const fence = line.match(/^```(\w*)\s*$/)
+    // 围栏代码块：支持 Markdown 规定的 3 个及以上反引号（备注正文含 ``` 时会用更长的围栏）。
+    const fence = line.match(/^(`{3,})([\w+-]*)\s*$/)
     if (fence) {
       closeLists()
-      const lang = fence[1] || ''
+      const ticks = fence[1].length
+      const lang = fence[2] || ''
+      const closeRe = new RegExp('^`{' + ticks + ',}\\s*$')
       const buf = []
       i++
-      while (i < lines.length && !lines[i].startsWith('```')) {
+      while (i < lines.length && !closeRe.test(lines[i])) {
         buf.push(lines[i]); i++
       }
-      i++ // 跳过结束 ```
+      if (i < lines.length) i++ // 跳过结束围栏
       if (lang === 'diff') {
         html.push(renderDiffLines(buf.join('\n')))
       } else {

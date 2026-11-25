@@ -233,3 +233,7 @@ bempdist/dist_exe/
 
 # ---------- 发布说明 ----------
 release-notes-*.md
+
+# ---------- H-01：浏览器回归 profile 禁止再次入库 ----------
+# Chrome 的 Login Data/Cookies/History/Web Data 属敏感数据，回归截图/证据只保留必要产物。
+docs/ui-regression-assets/_chrome-profile-*/

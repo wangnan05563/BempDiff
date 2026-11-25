@@ -45,6 +45,10 @@
         "to": "bempdiff/dist_input/webui"
       },
       {
+        "from": "sample_src",
+        "to": "bempdiff/sample_src"
+      },
+      {
         "from": "bempdiff-logo.png",
         "to": "bempdiff-logo.png"
       }

@@ -298,6 +298,32 @@ public final class ServerApiHttpTest {
         }
     }
 
+    /** M-09：示例目录可被显式属性覆盖，不再依赖进程 cwd；打包后资源路径可指向 extraResources。 */
+    public void testSampleEndpointUsesConfiguredDirectory() throws Exception {
+        Path tmp = Files.createTempDirectory("bdf-sample");
+        String oldDir = System.getProperty("bempdiff.sampleDir");
+        try {
+            Path sample = tmp.resolve("sample_src");
+            Files.createDirectories(sample.resolve("v1"));
+            Files.createDirectories(sample.resolve("v2"));
+            Files.writeString(sample.resolve("v1").resolve("A.java"), "class A {}", StandardCharsets.UTF_8);
+            System.setProperty("bempdiff.sampleDir", sample.toString());
+
+            ServerConfig config = newConfig(tmp);
+            ServerTestHarness.Server s = launch(config, Files.createDirectories(tmp.resolve("webroot")));
+            HttpResponse<String> r = s.get("/api/sample");
+            Asserts.assertEquals("示例接口应 200", 200, r.statusCode());
+            Map<String, Object> body = json(r);
+            Asserts.assertEquals("leftType", "folder", body.get("leftType"));
+            Asserts.assertEquals("v1", sample.resolve("v1").toString(), body.get("leftPath"));
+            Asserts.assertEquals("v2", sample.resolve("v2").toString(), body.get("rightPath"));
+        } finally {
+            if (oldDir == null) System.clearProperty("bempdiff.sampleDir");
+            else System.setProperty("bempdiff.sampleDir", oldDir);
+            deleteTree(tmp);
+        }
+    }
+
     /** T06218 /api/review：PUT 聚合/落盘、GET 回读、非法 jobId 400、方法 405、DELETE 清理。 */
     public void testReviewApiRoundTripAndGuards() throws Exception {
         Path tmp = Files.createTempDirectory("bdf-review-api");
@@ -320,16 +346,46 @@ public final class ServerApiHttpTest {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("files", files);
             body.put("jobId", "spoofed-should-be-overridden");
+            body.put("user", "spoofed-user");
+            body.put("updatedAt", "1970-01-01T00:00:00Z");
+
+            HttpResponse<String> noGuard = s.requestNoGuard("PUT", "/api/review/job-api-test", null);
+            Asserts.assertEquals("无本机请求头应 403", 403, noGuard.statusCode());
 
             HttpResponse<String> put = s.put("/api/review/job-api-test", com.bempdiff.server.Json.write(body));
             Asserts.assertEquals("PUT 应 200", 200, put.statusCode());
             Map<String, Object> pj = json(put);
             Asserts.assertEquals("路径 jobId 权威", "job-api-test", pj.get("jobId"));
+            Asserts.assertEquals("审阅人服务端权威", System.getProperty("user.name", "local"), pj.get("user"));
+            Asserts.assertNotEquals("更新时间服务端权威", "1970-01-01T00:00:00Z", pj.get("updatedAt"));
             Asserts.assertEquals("exists", Boolean.TRUE, pj.get("exists"));
             Map<?, ?> sum = (Map<?, ?>) pj.get("summary");
             Asserts.assertEquals("inProgressFiles", 1, ((Number) sum.get("inProgressFiles")).intValue());
             Asserts.assertEquals("totalHunks", 2, ((Number) sum.get("totalHunks")).intValue());
             Asserts.assertTrue("应落盘到 reviewDir", Files.isRegularFile(reviews.resolve("job-api-test.json")));
+
+            // M-14：非对象根节点 / 非法 JSON / 缺 files 均 400，且不能清空已有审阅。
+            Asserts.assertEquals("null body 应 400", 400, s.put("/api/review/job-api-test", "null").statusCode());
+            Asserts.assertEquals("数组 body 应 400", 400, s.put("/api/review/job-api-test", "[]").statusCode());
+            Asserts.assertEquals("非法 JSON 应 400", 400, s.put("/api/review/job-api-test", "{bad").statusCode());
+            Asserts.assertEquals("缺 files 应 400", 400, s.put("/api/review/job-api-test", "{\"foo\":1}").statusCode());
+            Asserts.assertEquals("非法请求后原文件仍存在", true, Files.isRegularFile(reviews.resolve("job-api-test.json")));
+
+            // 用裸 socket 只声明超大 Content-Length、不发送 8MB 请求体：验证服务端在读取前就 413。
+            try (java.net.Socket sock = new java.net.Socket("127.0.0.1", s.port);
+                 java.io.OutputStream out = sock.getOutputStream();
+                 java.io.BufferedReader in = new java.io.BufferedReader(
+                         new java.io.InputStreamReader(sock.getInputStream(), StandardCharsets.UTF_8))) {
+                String req = "PUT /api/review/job-api-test HTTP/1.1\r\n"
+                        + "Host: 127.0.0.1\r\n"
+                        + "X-BempDiff-Request: 1\r\n"
+                        + "X-BempDiff-Token: " + s.token + "\r\n"
+                        + "Content-Length: " + (8L * 1024 * 1024 + 1) + "\r\n"
+                        + "Connection: close\r\n\r\n";
+                out.write(req.getBytes(StandardCharsets.UTF_8));
+                out.flush();
+                Asserts.assertContains("超过 8MB 应 413", String.valueOf(in.readLine()), "413");
+            }
 
             HttpResponse<String> get = s.get("/api/review/job-api-test");
             Asserts.assertEquals("GET 应 200", 200, get.statusCode());

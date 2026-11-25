@@ -30,9 +30,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -98,13 +100,20 @@ public final class Decompiler {
             new Semaphore(Math.max(1, Runtime.getRuntime().availableProcessors()));
 
     /** NF-02：进程内 CFR 无法从外部强杀，放到守护线程里执行并由 Future 限时等待；
-     *  超时后请求线程立即返回（外层降级 javap），遗留线程由 daemon 属性保证不阻塞进程退出。 */
+     *  超时后请求线程立即返回（外层降级 javap），遗留线程由 daemon 属性保证不阻塞进程退出。
+     *  H-05：固定线程池 + 有界队列，超时后遗留的 CFR 线程最多占满池，不会像 cachedThreadPool
+     *  那样无限创建线程；队列满时直接拒绝并降级 javap，避免请求堆积。 */
+    private static final int CFR_POOL_SIZE = Math.max(1, Runtime.getRuntime().availableProcessors());
     private static final ExecutorService INPROC_CFR_POOL =
-            Executors.newCachedThreadPool(r -> {
-                Thread t = new Thread(r, "bempdiff-cfr-inproc");
-                t.setDaemon(true);
-                return t;
-            });
+            new ThreadPoolExecutor(
+                    CFR_POOL_SIZE, CFR_POOL_SIZE, 0L, TimeUnit.MILLISECONDS,
+                    new ArrayBlockingQueue<>(Math.max(8, CFR_POOL_SIZE * 2)),
+                    r -> {
+                        Thread t = new Thread(r, "bempdiff-cfr-inproc");
+                        t.setDaemon(true);
+                        return t;
+                    },
+                    new ThreadPoolExecutor.AbortPolicy());
 
     /**
      * D5 跨会话持久化反编译缓存（2026-08-17，来源 docs/BempDiff_AI优化与竞品分析报告.md P0）。
@@ -117,12 +126,16 @@ public final class Decompiler {
      */
     private static final int DISK_CACHE_MAX = 4000;
     private static final int CACHE_VERSION = 1;
+    /** M-05：单线程 + 有界队列，磁盘写不及时丢弃缓存任务（best-effort），避免无界积压拖垮内存。 */
     private static final ExecutorService diskWriter =
-            Executors.newSingleThreadExecutor(r -> {
-                Thread t = new Thread(r, "bempdiff-diskcache");
-                t.setDaemon(true);
-                return t;
-            });
+            new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
+                    new ArrayBlockingQueue<>(256),
+                    r -> {
+                        Thread t = new Thread(r, "bempdiff-diskcache");
+                        t.setDaemon(true);
+                        return t;
+                    },
+                    new ThreadPoolExecutor.DiscardPolicy());
     static {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             diskWriter.shutdown();
@@ -181,6 +194,10 @@ public final class Decompiler {
         Path f = dir.resolve(key + ".dec");
         if (!Files.exists(f)) return null;
         try {
+            if (Files.size(f) <= 0) { // M-05：空/半截缓存不能回填内存
+                Files.deleteIfExists(f);
+                return null;
+            }
             diskHits.incrementAndGet();
             return new String(Files.readAllBytes(f), StandardCharsets.UTF_8);
         } catch (IOException e) {
@@ -193,12 +210,25 @@ public final class Decompiler {
         if (dir == null) return;
         diskWriter.submit(() -> {
             Path f = dir.resolve(key + ".dec");
+            Path tmp = null;
             try {
-                Files.write(f, value.getBytes(StandardCharsets.UTF_8));
+                // M-05：同目录临时文件 + 原子 move，崩溃只可能留下 .tmp，不会出现半截 .dec。
+                tmp = Files.createTempFile(dir, "dec-", ".tmp");
+                Files.write(tmp, value.getBytes(StandardCharsets.UTF_8));
+                try {
+                    Files.move(tmp, f, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                    Files.move(tmp, f, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                }
                 long c = diskCount.incrementAndGet();
                 if (c > DISK_CACHE_MAX) evictDisk(dir, DISK_CACHE_MAX * 8 / 10);
-            } catch (IOException ignored) {
-                // 落盘失败：best-effort，忽略
+            } catch (IOException | RejectedExecutionException ignored) {
+                // 落盘失败/队列满：best-effort，忽略
+            } finally {
+                if (tmp != null) {
+                    try { Files.deleteIfExists(tmp); } catch (IOException ignored) { /* 忽略 */ }
+                }
             }
         });
     }
@@ -252,9 +282,10 @@ public final class Decompiler {
 
         // P1-D：仅在真正计算（CFR/javap）前取闸门许可，缓存命中路径不消耗许可。
         // acquireUninterruptibly 避免 InterruptedException 侵入仅声明 IOException 的签名。
-        DECOMPILE_GATE.acquireUninterruptibly();
+        // H-05：先成功创建临时文件再取许可，避免 createTempFile 失败时漏 release；deleteOnExit 兜底。
         File tmp = File.createTempFile("bempdiff-cls-", ".class"); // NOSONAR java:S5443 — 复核通过：临时文件唯一前缀命名、用后即删并以 deleteOnExit 兜底，不用于跨进程共享数据
-        // 注：finally 中已显式删除，无需 deleteOnExit（避免长生命周期 GUI 累积路径引用）。
+        tmp.deleteOnExit();
+        DECOMPILE_GATE.acquireUninterruptibly();
         try {
             Files.write(tmp.toPath(), classBytes);
             String result;
@@ -274,11 +305,17 @@ public final class Decompiler {
                 result = javap(tmp);
             }
             decompileCache.put(cacheKey, result);
-            diskPutAsync(cacheKey, result); // 3) 异步落盘，跨会话命中（D5）
+            // 超时/失败后的 javap 是降级结果，不能写入跨会话磁盘缓存，否则下次会直接命中残缺源码。
+            if (!result.startsWith("// [降级]")) diskPutAsync(cacheKey, result);
             return result;
         } finally {
-            Files.delete(tmp.toPath());
-            DECOMPILE_GATE.release();
+            try {
+                Files.deleteIfExists(tmp.toPath());
+            } catch (IOException ignored) {
+                // Windows 上 CFR 可能仍持有句柄；deleteOnExit 兜底，不能因清理失败覆盖已生成结果或漏 release。
+            } finally {
+                DECOMPILE_GATE.release();
+            }
         }
     }
 
@@ -288,7 +325,12 @@ public final class Decompiler {
      * 每次调用自建一个 driver 实例（CFR 非线程安全共享实例），由调用方线程池并行驱动以线性扩展。
      */
     private String cfrInProcess(File classFile) throws IOException {
-        Future<String> future = INPROC_CFR_POOL.submit(() -> cfrInProcessUnbounded(classFile));
+        Future<String> future;
+        try {
+            future = INPROC_CFR_POOL.submit(() -> cfrInProcessUnbounded(classFile));
+        } catch (RejectedExecutionException e) {
+            throw new IOException("CFR 线程池繁忙，已降级 javap", e);
+        }
         try {
             return future.get(DECOMPILE_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (TimeoutException te) {

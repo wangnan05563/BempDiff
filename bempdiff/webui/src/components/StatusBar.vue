@@ -1,7 +1,11 @@
 <script setup>
 import { computed } from 'vue'
-import { state, isRunning, phaseLabel, cancelExport, setReviewCockpit } from '../store'
+import { state, isRunning, phaseLabel, cancelExport, setReviewCockpit, flushReview } from '../store'
 import { t } from '../lib/i18n'
+
+function retryReviewSave() {
+  flushReview().catch(() => {})
+}
 
 function basename(p) {
   if (!p) return ''
@@ -55,6 +59,12 @@ const versions = computed(() => {
       {{ t('info.modified') }} <b class="text-body">{{ s.modified }}</b> · {{ t('info.unchanged') }} <b class="text-body">{{ s.unchanged }}</b>
     </span>
     <span v-if="fullStats" :title="t('sb.bizTip')">{{ t('info.bizChanged') }} <b class="text-body">{{ fullStats.bizChanged }}</b> · {{ t('info.jarChanged') }} <b class="text-body">{{ fullStats.jarChanged }}</b></span>
+    <span v-if="state.reviewSaveState === 'error' && state.review && state.review.jobId" class="text-danger fw-semibold review-save-error"
+          :title="t('sb.reviewSaveTip', { msg: state.reviewError || '' })">
+      <i class="bi bi-cloud-slash"></i> {{ t('sb.reviewSaveFailed') }}
+      <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline" @click="retryReviewSave()"
+              :aria-label="t('sb.reviewSaveRetry')" :title="t('sb.reviewSaveRetry')">{{ t('sb.reviewSaveRetry') }}</button>
+    </span>
     <!-- T06218 审阅进度：由 state.reviewSummary 即时驱动，标记后同帧更新（AC-10） -->
     <span v-if="state.job && state.reviewSummary && state.reviewSummary.totalFiles" class="review-summary"
           :title="t('sb.reviewTip', { files: state.reviewSummary.totalFiles, hunks: state.reviewSummary.totalHunks })">

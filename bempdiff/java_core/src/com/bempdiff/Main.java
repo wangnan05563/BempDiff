@@ -352,6 +352,8 @@ public final class Main { // NOSONAR(S6539) - CLI 聚合入口，依赖面广但
             ProjectContext ctx = loadProjectContext(a);
             boolean conn = analyzer.testConnection(aiCfg);
             LOG.log(java.util.logging.Level.INFO, "[AI] 连接测试={0}", conn);
+            // H-10：审计口径必须以实际产出为准；Mock 或阶段A降级都不能声称“真实模型”。
+            boolean aiRealLlm = analyzer instanceof HttpAiAnalyzer;
             Map<String, DecompiledUnit> aiMap = new LinkedHashMap<>(decompiled);
             aiMap.putAll(text);
             StageASummary summary;
@@ -360,6 +362,7 @@ public final class Main { // NOSONAR(S6539) - CLI 聚合入口，依赖面广但
                 summary = analyzer.stageA(r, aiMap, aiCfg, ctx, apiCompat, impact);
             } catch (RuntimeException ex) {
                 LOG.log(java.util.logging.Level.WARNING, "[AI] 阶段A 调用失败，已降级：{0}", ex.getMessage());
+                aiRealLlm = false;
                 summary = new StageASummary();
                 summary.setOverallRisk("UNKNOWN");
                 summary.setImpactScope("AI 阶段A 不可用（连接失败/超时/鉴权错误），仅给出基础差异结论。错误：" + ex.getMessage());
@@ -384,6 +387,7 @@ public final class Main { // NOSONAR(S6539) - CLI 聚合入口，依赖面广但
                         + http.getUsageCompletionTokens() + " tokens（" + http.getUsageCalls() + " 次调用）";
                 rep.setAiUsageLine(usageLine);
             }
+            rep.setAiRealLlm(aiRealLlm);
             rep.writeToFile(oldSnap, newSnap, r, s, decompiled, text, summary, b, ctx, libJar, outMd);
             System.out.println("== REPORT (AI) =="); // NOSONAR
             System.out.println("项目级上下文: " + (ctx != null && !ctx.isEmpty() ? ("已启用（构建系统=" + ctx.getBuildSystem() + ", 模块数=" + ctx.getModules().size() + "）") : "未启用")); // NOSONAR

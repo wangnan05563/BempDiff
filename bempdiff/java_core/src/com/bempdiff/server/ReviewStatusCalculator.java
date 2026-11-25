@@ -3,9 +3,11 @@ package com.bempdiff.server;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * T06218 文件级审阅状态聚合（PRD B1 / §10.2 Review Schema）。
@@ -76,7 +78,9 @@ public final class ReviewStatusCalculator {
         out.put("hunks", hunks);
 
         boolean manual = boolValue(raw == null ? null : raw.get("manualOverride"));
-        String manualStatus = normalizeStatus(str(raw == null ? null : raw.get("status")), REVIEWED);
+        // M-02：只有 manualOverride=true 且携带合法 status 才视为已审；缺 status 不能默认 REVIEWED，
+        // 否则一个字段缺失的请求就能把文件伪装成“已审”。
+        String manualStatus = normalizeStatus(str(raw == null ? null : raw.get("status")), UNREVIEWED);
         List<Object> lines = normalizeLines(raw == null ? null : raw.get("lines"));
         String computed = aggregateFileStatus(hunkTotal, hunks, manual, manualStatus);
         // 旧 localStorage 迁移来的行标记没有 Hunk 总数：不能判「全审」，但显然已开始审。
@@ -99,7 +103,7 @@ public final class ReviewStatusCalculator {
     public static String aggregateFileStatus(int hunkTotal, Map<String, ?> hunks,
                                              boolean manualOverride, String manualStatus) {
         if (manualOverride) {
-            return normalizeStatus(manualStatus, REVIEWED);
+            return normalizeStatus(manualStatus, UNREVIEWED);
         }
         int reviewed = 0;
         boolean needsReview = false;
@@ -121,7 +125,7 @@ public final class ReviewStatusCalculator {
     public static Map<String, Object> summarize(Map<String, Object> doc) {
         Map<String, Object> out = new LinkedHashMap<>();
         int totalFiles = 0, reviewedFiles = 0, inProgressFiles = 0, unreviewedFiles = 0, needsReviewFiles = 0, manualFiles = 0;
-        int totalHunks = 0, reviewedHunks = 0, needsReviewHunks = 0;
+        long totalHunks = 0, reviewedHunks = 0, needsReviewHunks = 0;
         Object rawFiles = doc == null ? null : doc.get("files");
         if (rawFiles instanceof Map<?, ?> files) {
             for (Object v : files.values()) {
@@ -134,21 +138,25 @@ public final class ReviewStatusCalculator {
                     case NEEDS_REVIEW -> needsReviewFiles++;
                     default -> unreviewedFiles++;
                 }
-                if (boolValue(f.get("manualOverride"))) manualFiles++;
+                boolean manual = boolValue(f.get("manualOverride"));
+                if (manual) manualFiles++;
+                // M-15：文件级手动“已审”视为覆盖 Hunk 级状态，避免出现“文件已审但汇总仍显示需复核”。
+                boolean manualReviewed = manual && REVIEWED.equals(status);
 
-                int hunkTotal = intValue(f.get("hunkTotal"), 0);
+                long hunkTotal = Math.max(0, longValue(f.get("hunkTotal"), 0));
                 Object rawHunks = f.get("hunks");
-                int reviewedForFile = 0;
+                long reviewedForFile = 0;
                 if (rawHunks instanceof Map<?, ?> hm) {
                     for (Object hs : hm.values()) {
                         String s = normalizeStatus(String.valueOf(hs), UNREVIEWED);
                         if (REVIEWED.equals(s)) reviewedForFile++;
-                        else if (NEEDS_REVIEW.equals(s)) needsReviewHunks++;
+                        else if (NEEDS_REVIEW.equals(s) && !manualReviewed) needsReviewHunks++;
                     }
                 }
+                if (manualReviewed) reviewedForFile = hunkTotal;
                 if (reviewedForFile > hunkTotal) hunkTotal = reviewedForFile;
-                totalHunks += hunkTotal;
-                reviewedHunks += reviewedForFile;
+                totalHunks += Math.min(Integer.MAX_VALUE, hunkTotal);
+                reviewedHunks += Math.min(Integer.MAX_VALUE, reviewedForFile);
             }
         }
         out.put("totalFiles", totalFiles);
@@ -188,10 +196,11 @@ public final class ReviewStatusCalculator {
     private static List<Object> normalizeLines(Object raw) {
         List<Object> lines = new ArrayList<>();
         if (!(raw instanceof Iterable<?> it)) return lines;
+        Set<Integer> seen = new HashSet<>();
         for (Object v : it) {
             if (v instanceof Number n) {
                 int i = n.intValue();
-                if (i >= 0 && i <= 2_000_000 && !lines.contains(i)) lines.add(i);
+                if (i >= 0 && i <= 2_000_000 && seen.add(i)) lines.add(i);
             }
         }
         return lines;
@@ -220,6 +229,14 @@ public final class ReviewStatusCalculator {
         return fallback;
     }
 
+    private static long longValue(Object o, long fallback) {
+        if (o instanceof Number n) return n.longValue();
+        if (o instanceof String s) {
+            try { return Long.parseLong(s.trim()); } catch (NumberFormatException ignored) { return fallback; }
+        }
+        return fallback;
+    }
+
     private static boolean boolValue(Object o) {
         if (o instanceof Boolean b) return b;
         return "true".equalsIgnoreCase(String.valueOf(o));
@@ -229,7 +246,7 @@ public final class ReviewStatusCalculator {
         return o == null ? "" : String.valueOf(o);
     }
 
-    private static int percent(int part, int total) {
+    private static int percent(long part, long total) {
         if (total <= 0) return 0;
         return (int) Math.round(part * 100.0 / total);
     }

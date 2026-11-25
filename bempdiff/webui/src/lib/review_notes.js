@@ -226,10 +226,14 @@ export function summarizeInline(v, max = 160) {
 }
 
 /** 代码围栏长度：比正文最长反引号串多 1，最少 3，避免备注正文截断围栏。 */
-export function codeFenceFor(text, lang = 'text') {
+export function codeFenceTicks(text) {
   const runs = str(text).match(/`+/g) || []
   const longest = runs.reduce((m, x) => Math.max(m, x.length), 0)
-  return '`'.repeat(Math.max(3, longest + 1)) + lang
+  return Math.max(3, longest + 1)
+}
+
+export function codeFenceFor(text, lang = 'text') {
+  return '`'.repeat(codeFenceTicks(text)) + lang
 }
 
 function mdPath(path) {
@@ -269,7 +273,7 @@ function noteBlocks(notes, includeText) {
       const fence = codeFenceFor(n.text, 'text')
       out.push(fence)
       out.push(n.text)
-      out.push('`'.repeat(fence.length - 4))
+      out.push('`'.repeat(codeFenceTicks(n.text)))
     } else {
       out.push('- 备注正文已排除')
     }
@@ -360,7 +364,7 @@ export function buildReviewAppendix(review, opts = {}) {
           const fence = codeFenceFor(n.text, 'text')
           out.push(fence)
           out.push(n.text)
-          out.push('`'.repeat(fence.length - 4))
+          out.push('`'.repeat(codeFenceTicks(n.text)))
         } else {
           out.push('- 备注正文已排除')
         }

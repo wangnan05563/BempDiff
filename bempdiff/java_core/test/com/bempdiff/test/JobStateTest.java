@@ -74,6 +74,20 @@ public final class JobStateTest {
         Asserts.assertEquals("负进度不覆盖旧值(仍 40)", 40, job.getProgress());
     }
 
+    /** M-11：QUEUED 取消应立即终态；后台线程随后 markRunning 不得把终态拉回 RUNNING。 */
+    public void testCancelQueuedThenMarkRunningDoesNotResurrect() {
+        Job job = newJob();
+        job.requestCancel();
+        job.markCancelled();
+        Asserts.assertEquals("QUEUED 取消应立即 CANCELLED", "CANCELLED", job.getStatus());
+        Asserts.assertTrue("应记录结束时间", job.finishedAtMillis > 0);
+        job.markRunning("parsing", "解析包…", 10);
+        Asserts.assertEquals("取消后 markRunning 不应复活作业", "CANCELLED", job.getStatus());
+        Asserts.assertEquals("阶段保持 cancelled", "cancelled", job.getPhase());
+        job.complete(null, null, emptyResult(), new DiffStats());
+        Asserts.assertEquals("取消后 complete 不应覆盖终态", "CANCELLED", job.getStatus());
+    }
+
     // ---------------- appendMessage ----------------
 
     public void testAppendMessage_nonEmptyBaseJoinsWithSeparator() {

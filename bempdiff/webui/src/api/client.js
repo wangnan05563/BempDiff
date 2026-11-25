@@ -1,9 +1,12 @@
 // BempDiff 后端 `server` 子命令的极简 fetch 封装。
 // 后端绑定 127.0.0.1，同源（dev 经 vite proxy，生产经桌面壳 sidecar 同源托管）免 CORS。
+import { authHeaders } from '../lib/api_auth'
 const BASE = ''
+// 本机 API 的 CSRF 防护头 + 会话 token；跨站表单/网页无法附加。
+const REQUEST_GUARD = authHeaders()
 
 async function req(method, path, body, opts = {}) {
-  const init = { method, headers: {} }
+  const init = { method, headers: { ...REQUEST_GUARD } }
   if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json'
     init.body = JSON.stringify(body)
@@ -142,7 +145,7 @@ export const api = {
       try {
         res = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: body !== undefined ? JSON.stringify(body) : '{}',
           signal: controller.signal
         })

@@ -5,7 +5,8 @@ import {
   state, closeLaunchpad, setLaunchpadStartup, isLaunchpadStartupEnabled,
   loadCompareHistory, removeCompareHistory, loadSavedSessions, saveNamedSession,
   applyNamedSession, removeNamedSession, triggerCompare, buildOptions, toast,
-  loadReviewForJob, loadInsights, setReviewCockpit, openLaunchpad, generateReport
+  loadReviewForJob, loadInsights, setReviewCockpit, openLaunchpad, generateReport,
+  resetJobViewState, flushReview
 } from '../store'
 import { t } from '../lib/i18n'
 
@@ -81,11 +82,23 @@ async function openRecent(item, index) {
         status = null
       }
       if (status && status.status === 'DONE' && status.tree) {
+        // H-08：切 job 前先落盘旧审阅；失败则拒绝切换，避免 resetReview 丢记录。
+        if (state.review && state.review.jobId && state.reviewSaveState !== 'saved' && state.reviewSaveState !== 'idle') {
+          try {
+            await flushReview()
+          } catch (e) {
+            toast('error', t('lp.reviewSaveBlocked', { msg: e.message || e }))
+            return
+          }
+        }
+        // H-07：历史作业 B 不能继承 A 的报告/AI/洞察/展开缓存。
+        resetJobViewState()
         state.job = status
         state.activeCompareId = item.jobId
         state.oldPath = item.oldPath || state.oldPath
         state.newPath = item.newPath || state.newPath
         state.leftType = item.leftType === 'folder' ? 'folder' : 'package'
+        state.sameInputCompare = false
         state.tabs = []
         state.activeKey = null
         state.jobProgress = { status: 'DONE', progress: 100, phase: 'done', message: t('lp.openJob') }

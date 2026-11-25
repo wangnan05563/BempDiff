@@ -27,6 +27,8 @@ public final class Job {
     private volatile PackageSnapshot newSnap; // NOSONAR(S3077)
     private volatile DiffResult result;       // NOSONAR(S3077)
     private volatile DiffStats stats;         // NOSONAR(S3077)
+    /** 本作业本次比对发生的 AST 降级文件数（作业级快照，不用进程级累计值，避免报告串数）。 */
+    private volatile int astFallbackFiles;
     /** 两侧物理平铺解包报告（unpackNested 开启时非空；[0]=旧 侧，[1]=新 侧）。引用 volatile 保证可见性。 */
     private volatile com.bempdiff.unpack.UnpackReport[] unpackReports; // NOSONAR S3077 - 整体引用一次性回填/读取（后台完成后整体 set 替换），无元素级并发改写，volatile 保证引用可见性即可
 
@@ -75,6 +77,14 @@ public final class Job {
         return stats;
     }
 
+    public int getAstFallbackFiles() {
+        return astFallbackFiles;
+    }
+
+    public void setAstFallbackFiles(int v) {
+        astFallbackFiles = Math.max(0, v);
+    }
+
     public String getStatus() {
         return status;
     }
@@ -103,7 +113,9 @@ public final class Job {
     }
 
     /** 进入某个运行阶段（含进度百分比；progress<0 表示不更新进度值）。 */
-    public void markRunning(String phase, String message, int progress) {
+    public synchronized void markRunning(String phase, String message, int progress) {
+        // M-11：已请求取消或已终态的作业不能被后台线程重新拉回 RUNNING（取消接口会先置 CANCELLED）。
+        if (cancelRequested || isTerminal(status)) return;
         this.status = STATUS_RUNNING;
         this.phase = phase;
         this.message = message;
@@ -117,7 +129,7 @@ public final class Job {
     }
 
     /** 比对成功完成：回填产物并置 DONE/100%。仅当仍 RUNNING 时生效（已被取消/失败则忽略）。 */
-    public void complete(PackageSnapshot oldSnap, PackageSnapshot newSnap, DiffResult result, DiffStats stats) {
+    public synchronized void complete(PackageSnapshot oldSnap, PackageSnapshot newSnap, DiffResult result, DiffStats stats) {
         if (!STATUS_RUNNING.equals(status)) return;
         this.oldSnap = oldSnap;
         this.newSnap = newSnap;
@@ -131,7 +143,7 @@ public final class Job {
     }
 
     /** 比对失败：记录错误并置 ERROR。仅当仍 RUNNING 时生效。 */
-    public void fail(String error) {
+    public synchronized void fail(String error) {
         if (!STATUS_RUNNING.equals(status)) return;
         this.status = "ERROR";
         this.phase = "error";
@@ -143,7 +155,7 @@ public final class Job {
     /** 被取消：将 QUEUED/RUNNING 态置为 CANCELLED（幂等，不覆盖已完成/已失败的终态）。
      *  原实现仅允许 RUNNING，导致「提交后立刻取消」的任务一直停在 QUEUED 永不淘汰；P1-E 放宽到
      *  已排队/进行中均可取消，并记录结束时间供 JobStore 淘汰。 */
-    public void markCancelled() {
+    public synchronized void markCancelled() {
         if (isTerminal(status)) return;
         this.status = "CANCELLED";
         this.phase = "cancelled";

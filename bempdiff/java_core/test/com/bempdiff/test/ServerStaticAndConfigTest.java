@@ -137,7 +137,7 @@ public final class ServerStaticAndConfigTest {
         }
     }
 
-    /** OPTIONS 预检（多端点）应返回 204 并带 CORS 头；非法方法（config DELETE）应 405。 */
+    /** OPTIONS 预检（多端点）应返回 204 且不返回 CORS 许可；非法方法（config DELETE）应 405。 */
     public void testOptionsPreflightAndUnsupportedMethod() throws Exception {
         Path tmp = Files.createTempDirectory("bdf-cors");
         try {
@@ -146,8 +146,7 @@ public final class ServerStaticAndConfigTest {
 
             HttpResponse<String> optCfg = s.options("/api/config");
             Asserts.assertEquals("OPTIONS /api/config 应 204", 204, optCfg.statusCode());
-            Asserts.assertEquals("应带 ACAO=*", "*", optCfg.headers().firstValue("Access-Control-Allow-Origin").orElse(""));
-            Asserts.assertContains("应声明允许方法", optCfg.headers().firstValue("Access-Control-Allow-Methods").orElse(""), "POST");
+            Asserts.assertFalse("不应返回通配 ACAO", optCfg.headers().firstValue("Access-Control-Allow-Origin").isPresent());
 
             HttpResponse<String> optCmp = s.options("/api/session/compare");
             Asserts.assertEquals("OPTIONS compare 应 204", 204, optCmp.statusCode());

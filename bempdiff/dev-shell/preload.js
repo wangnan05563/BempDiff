@@ -18,9 +18,21 @@ function readAppVersion() {
   }
 }
 
+// 本机会话 token：主进程每次启动随机生成，Java sidecar 通过环境变量拿到同一值。
+// 前端所有 /api/* 请求带 X-BempDiff-Token；下载直链由后端首页 Cookie 自动携带。
+function readApiToken() {
+  try {
+    return String(ipcRenderer.sendSync('bempdiff:api-token') || '')
+  } catch (_) {
+    return ''
+  }
+}
+
 contextBridge.exposeInMainWorld('bempdiff', {
   /** 安装包版本号（app.getVersion()）；浏览器模式下不存在该桥，前端自行回落。 */
   appVersion: readAppVersion(),
+  /** 本次会话 API token（Electron 主进程随机生成）。 */
+  apiToken: readApiToken(),
   /**
    * 调主进程 dialog.showOpenDialog 选择文件或文件夹。
    * @param {{directory?: boolean, multiple?: boolean}} [opts]

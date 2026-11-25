@@ -28,8 +28,19 @@ export function configKindOf(key = '') {
 }
 
 export function isSecretKey(path = '') {
-  const leaf = String(path).split(/[.[\]]/).filter(Boolean).pop() || ''
-  return SECRET_KEY_RE.test(leaf.replace(/["']/g, ''))
+  // H-09：按路径段判断，不能只看叶子。datasource.password.value 中的 password、
+  // ["api.key"] 中的 api.key 都必须命中；否则“脱敏”仍会明文展示密码/密钥。
+  const normalized = String(path)
+    .replace(/\[\s*["']?([^"'\]]+)["']?\s*\]/g, '.$1')
+    .replace(/["']/g, '')
+  const segments = normalized.split(/[.[\]]/).filter(Boolean)
+  if (segments.some(seg => SECRET_KEY_RE.test(seg))) return true
+  // 拆开后不再是一个词：api.key / private-key / auth.token / secret.password。
+  for (let i = 0; i + 1 < segments.length; i++) {
+    const pair = `${segments[i]}-${segments[i + 1]}`
+    if (/^(api|private|access|auth|secret|session|credential)[-_]?(key|token|secret|password|passwd|pwd|credential)$/i.test(pair)) return true
+  }
+  return false
 }
 
 function joinPath(parent, key) {
@@ -110,9 +121,17 @@ function unescapePropertyKey(k) {
 function parseProperties(text) {
   const entries = new Map()
   const duplicates = []
+  let section = ''
   for (const { text: line } of logicalLines(text)) {
     const s = line.replace(/^\s+/, '')
-    if (!s || s.startsWith('#') || s.startsWith('!')) continue
+    if (!s || s.startsWith('#') || s.startsWith('!') || s.startsWith(';')) continue
+    if (/^\[\[.*\]\]$/.test(s)) throw new Error('TOML 数组表 [[...]] 暂不支持，已降级为原始文本比对')
+    if (/^\[[^\]]+\]$/.test(s)) {
+      // M-04：保留 INI/TOML section 前缀，避免不同 section 的同名 key 互相覆盖。
+      section = s.slice(1, -1).trim()
+      if (!section) throw new Error('配置 section 名为空')
+      continue
+    }
     let sep = -1
     let escaped = false
     for (let i = 0; i < s.length; i++) {
@@ -124,7 +143,7 @@ function parseProperties(text) {
     if (sep < 0) continue
     const key = unescapePropertyKey(s.slice(0, sep).trim())
     const value = s.slice(sep + 1).trim()
-    const path = key
+    const path = section ? joinPath(section, key) : key
     if (!key) continue
     if (entries.has(path)) duplicates.push(path)
     addEntry(entries, path, value)
@@ -173,7 +192,7 @@ function parseYaml(text) {
   for (let i = 0; i < lines.length; i++) {
     let raw = lines[i]
     if (!raw.trim() || /^\s*#/.test(raw) || /^\s*---\s*$/.test(raw) || /^\s*\.\.\.\s*$/.test(raw)) continue
-    if (/^\t/.test(raw)) throw new Error('YAML 不允许用 Tab 缩进（第 ' + (i + 1) + ' 行）')
+    if (/^ *\t/.test(raw)) throw new Error('YAML 不允许用 Tab 缩进（第 ' + (i + 1) + ' 行）')
     const indent = raw.match(/^ */)[0].length
     let content = stripYamlComment(raw.slice(indent)).trimEnd()
     if (!content) continue
@@ -194,14 +213,15 @@ function parseYaml(text) {
         const childPath = joinPath(path, inlineKey)
         if (!val) {
           addEntry(entries, childPath, '{}', { type: 'object', empty: true })
-        } else if (val.startsWith('&') || val.startsWith('*')) {
-          addEntry(entries, childPath, val, { type: val.startsWith('&') ? 'anchor' : 'alias' })
-          if (val.startsWith('&')) push({ indent, path: childPath, kind: 'map', seq: 0 })
+        } else if (val.startsWith('&')) {
+          addEntry(entries, childPath, val, { type: 'anchor' })
+        } else if (val.startsWith('*')) {
+          addEntry(entries, childPath, val, { type: 'alias' })
         } else {
           addEntry(entries, childPath, scalarValue(val))
         }
-        push({ indent, path, kind: 'map', seq: 0 })
-        if (val.startsWith('&')) push({ indent, path: childPath, kind: 'map', seq: 0 })
+        // M-04：`- config:` 后续缩进子键必须挂在 config 下，而不是挂在序号节点 `[n]` 下。
+        if (!val.startsWith('*')) push({ indent, path: childPath, kind: 'map', seq: 0 })
       } else if (rest.startsWith('&') || rest.startsWith('*')) {
         addEntry(entries, path, rest, { type: rest.startsWith('&') ? 'anchor' : 'alias' })
         if (rest.startsWith('&')) push({ indent, path, kind: 'map', seq: 0 })
@@ -222,13 +242,15 @@ function parseYaml(text) {
       push({ indent, path, kind: 'map', seq: 0 })
       continue
     }
-    if (/^[|>][+-]?$/.test(val)) {
+    const blockMatch = /^([|>])([+-]?)([1-9]?)$/.exec(val)
+    if (blockMatch) {
+      const contentIndent = indent + (blockMatch[3] ? Number(blockMatch[3]) : 2)
       const block = []
       let j = i + 1
       for (; j < lines.length; j++) {
         const l = lines[j]
         if (l.trim() && (l.match(/^ */)[0].length <= indent)) break
-        block.push(l.slice(Math.min(l.length, indent + 2)))
+        block.push(l.slice(Math.min(l.length, contentIndent)))
       }
       i = j - 1
       addEntry(entries, path, block.join('\n').replace(/\n+$/, ''))
@@ -275,15 +297,95 @@ function flattenJson(v, path, map) {
 }
 
 function parseJson(text) {
+  const src = String(text || '').trim() || 'null'
   let data
   try {
-    data = JSON.parse(String(text || '').trim() || 'null')
-  } catch (e) {
-    throw new Error(e.message || 'JSON 解析失败')
+    data = JSON.parse(src)
+  } catch (strictError) {
+    // M-04：.json5 允许注释、单引号、无引号 key、尾逗号；先按 JSON5 归一化再交给 JSON.parse。
+    try {
+      data = JSON.parse(normalizeJson5(src))
+    } catch (e) {
+      throw new Error(strictError.message || 'JSON 解析失败')
+    }
   }
   const entries = new Map()
   flattenJson(data, '', entries)
   return { entries, duplicates: [] }
+}
+
+/** 把 JSON5 的常见语法归一化为严格 JSON；复杂特性（多行字符串/十六进制数）仍会解析失败并由 UI 降级。 */
+function normalizeJson5(src) {
+  const s = String(src || '')
+  let out = ''
+  let quote = ''
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (quote === '"') {
+      out += c
+      if (c === '\\' && i + 1 < s.length) { out += s[++i]; continue }
+      if (c === '"') quote = ''
+      continue
+    }
+    if (quote === "'") {
+      if (c === '\\') {
+        const n = s[++i]
+        if (n === "'") out += "'"
+        else if (n === '"') out += '\\"'
+        else out += '\\' + n
+        continue
+      }
+      if (c === "'") { out += '"'; quote = ''; continue }
+      if (c === '"') { out += '\\"'; continue }
+      if (c === '\n' || c === '\r') throw new Error('JSON5 单引号字符串不能跨行')
+      out += c
+      continue
+    }
+    if (c === '"') { quote = '"'; out += c; continue }
+    if (c === "'") { quote = "'"; out += '"'; continue }
+    if (c === '/' && s[i + 1] === '/') {
+      while (i < s.length && s[i] !== '\n') i++
+      out += '\n'
+      continue
+    }
+    if (c === '/' && s[i + 1] === '*') {
+      const end = s.indexOf('*/', i + 2)
+      if (end < 0) throw new Error('JSON5 块注释未闭合')
+      i = end + 1
+      continue
+    }
+    out += c
+  }
+  if (quote) throw new Error('JSON5 字符串未闭合')
+  return quoteBareKeys(out).replace(/,(\s*[}\]])/g, '$1')
+}
+
+/** 仅对对象 key 位置的无引号标识符补引号；扫描时跳过字符串，避免误改字符串内容。 */
+function quoteBareKeys(src) {
+  let out = ''
+  let quote = ''
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i]
+    if (quote) {
+      out += c
+      if (c === '\\' && i + 1 < src.length) out += src[++i]
+      else if (c === quote) quote = ''
+      continue
+    }
+    if (c === '"') { quote = '"'; out += c; continue }
+    out += c
+    if (c !== '{' && c !== ',') continue
+    let j = i + 1
+    while (j < src.length && /\s/.test(src[j])) j++
+    const m = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(src.slice(j))
+    if (!m) continue
+    let k = j + m[0].length
+    while (k < src.length && /\s/.test(src[k])) k++
+    if (src[k] !== ':') continue
+    out += src.slice(i + 1, j) + '"' + m[0] + '"'
+    i = j + m[0].length - 1
+  }
+  return out
 }
 
 // ---------------- XML（无外部实体/DTD） ----------------
@@ -296,7 +398,10 @@ function decodeXmlText(s) {
 function parseXml(text) {
   let src = String(text || '')
   if (/<!DOCTYPE|<!ENTITY/i.test(src)) throw new Error('XML 含 DOCTYPE/ENTITY，已拒绝解析')
-  src = src.replace(/<!--[\s\S]*?-->/g, '').replace(/<![CDATA[\s\S]*?]]>/g, '')
+  src = src.replace(/<!--[\s\S]*?-->/g, '')
+  // M-04：CDATA 是文本内容，不能整段丢弃；先转义成普通文本，解析后再统一 decodeXmlText。
+  src = src.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, (_, c) => String(c)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'))
   if (/<!DOCTYPE|<!ENTITY/i.test(src)) throw new Error('XML 含 DOCTYPE/ENTITY，已拒绝解析')
 
   const entries = new Map()

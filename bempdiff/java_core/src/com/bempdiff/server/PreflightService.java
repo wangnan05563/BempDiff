@@ -115,9 +115,14 @@ public final class PreflightService {
 
     private static boolean samePath(Path a, Path b) {
         try {
-            return a.toAbsolutePath().normalize().equals(b.toAbsolutePath().normalize());
-        } catch (RuntimeException e) {
-            return false;
+            // M-08：优先按文件系统同一性判断，能拦住两个指向同一文件的符号链接/硬链接。
+            return Files.isSameFile(a, b);
+        } catch (IOException | RuntimeException e) {
+            try {
+                return a.toAbsolutePath().normalize().equals(b.toAbsolutePath().normalize());
+            } catch (RuntimeException ignored) {
+                return false;
+            }
         }
     }
 
@@ -199,6 +204,19 @@ public final class PreflightService {
     private static void inspectFolder(Path root, Stats s, List<String> ignores) {
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
+                @Override
+                public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) {
+                    // M-08：目录也计入 50k 上限，防止“海量空目录”绕过文件计数导致预检卡死。
+                    if (dir.equals(root)) return FileVisitResult.CONTINUE;
+                    if (s.entries >= SCAN_ENTRY_CAP) {
+                        s.capped = true;
+                        return FileVisitResult.TERMINATE;
+                    }
+                    s.entries++;
+                    int depth = root.relativize(dir).getNameCount();
+                    if (depth > s.maxDepth) s.maxDepth = depth;
+                    return FileVisitResult.CONTINUE;
+                }
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) {
                     if (s.entries >= SCAN_ENTRY_CAP) {

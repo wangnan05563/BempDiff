@@ -54,6 +54,54 @@ describe('config semantic diff (FN-04)', () => {
     expect(bad.error).toContain('DOCTYPE')
   })
 
+  it('ini/toml sections keep distinct same-name keys', () => {
+    const text = '[db]\nhost=old\n[replica]\nhost=new\n'
+    const r = parseConfig('properties', text)
+    expect(r.ok).toBe(true)
+    expect(r.entries.has('db.host')).toBe(true)
+    expect(r.entries.has('replica.host')).toBe(true)
+    expect(r.duplicates).toHaveLength(0)
+  })
+
+  it('yaml sequence map keeps nested keys under the mapping', () => {
+    const r = parseConfig('yaml', 'items:\n  - config:\n      host: a\n      port: 1\n')
+    expect(r.ok).toBe(true)
+    expect(r.entries.has('items[0].config.host')).toBe(true)
+    expect(r.entries.has('items[0].config.port')).toBe(true)
+  })
+
+  it('xml CDATA is preserved as text instead of dropped', () => {
+    const r = parseConfig('xml', '<x><msg><![CDATA[<b>&amp;</b>]]></msg></x>')
+    expect(r.ok).toBe(true)
+    const text = r.entries.get('x.msg.#text')
+    expect(text && text.value).toBe('<b>&amp;</b>')
+  })
+
+  it('json5 comments / single quotes / bare keys / trailing commas parse', () => {
+    const r = parseConfig('json', "{ // c\n unquoted: 'v', list: [1, 2,], }")
+    expect(r.ok).toBe(true)
+    expect(r.entries.get('unquoted').value).toBe('v')
+    expect(r.entries.get('list[1]').value).toBe(2)
+  })
+
+  it('yaml block scalar honors explicit indentation indicator', () => {
+    const r = parseConfig('yaml', 'msg: |2\n  line1\n  line2\n')
+    expect(r.ok).toBe(true)
+    expect(r.entries.get('msg').value).toBe('line1\nline2')
+  })
+
+  it('yaml rejects tab used as indentation after spaces', () => {
+    const r = parseConfig('yaml', '  \tkey: 1\n')
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('Tab')
+  })
+
+  it('toml array table is rejected explicitly instead of merging sections', () => {
+    const r = parseConfig('properties', '[[items]]\nname=a\n')
+    expect(r.ok).toBe(false)
+    expect(r.error).toContain('数组表')
+  })
+
   it('mixed formats are detected by extension', () => {
     expect(configKindOf('a.properties')).toBe('properties')
     expect(configKindOf('a.yml')).toBe('yaml')
@@ -75,6 +123,19 @@ describe('config semantic diff (FN-04)', () => {
     expect(md).toContain('app.properties')
     expect(md).not.toContain('new')
     expect(md).not.toContain('old')
+  })
+
+  it('secret masking covers nested value and api.key path', () => {
+    const oldText = '{"datasource":{"password":{"value":"old-secret"}},"api":{"key":"old-key"}}'
+    const newText = '{"datasource":{"password":{"value":"new-secret"}},"api":{"key":"new-key"}}'
+    const r = diffConfig('json', oldText, newText)
+    expect(r.ok).toBe(true)
+    const nested = r.changes.find(c => c.path === 'datasource.password.value')
+    const apiKey = r.changes.find(c => c.path === 'api.key')
+    expect(nested && nested.secret).toBe(true)
+    expect(apiKey && apiKey.secret).toBe(true)
+    expect(nested.newValue).not.toContain('new-secret')
+    expect(apiKey.newValue).not.toContain('new-key')
   })
 
   it('yaml nesting over 64 levels is rejected before parsing', () => {

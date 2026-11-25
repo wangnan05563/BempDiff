@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { state, toggleExports, refreshExports, deleteExport, removeSyncExport, fmtBytes } from '../store'
+import { withToken } from '../lib/api_auth'
 import { t } from '../lib/i18n'
 
 const query = ref('')
@@ -95,7 +96,7 @@ function fmtTime(ms) {
           <span v-else-if="r.status === 'running' && r.etaText" class="text-secondary dl-msg">{{ r.etaText }}</span>
           <div class="dl-actions">
             <a v-if="r.status === 'done'" class="btn btn-sm btn-primary"
-               :href="`/api/export/${encodeURIComponent(r.id)}/download`" :download="r.filename">{{ t('common.download') }}</a>
+               :href="withToken(`/api/export/${encodeURIComponent(r.id)}/download`)" :download="r.filename">{{ t('common.download') }}</a>
             <button class="btn btn-sm btn-outline-danger" :aria-label="t('dl.deleteTitle')" :title="t('dl.deleteTitle')" @click="deleteExport(r.id)">{{ t('common.delete') }}</button>
           </div>
         </div>

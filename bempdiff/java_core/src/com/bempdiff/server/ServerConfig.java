@@ -258,7 +258,6 @@ public final class ServerConfig {
         ParseConfig c = new ParseConfig();
         c.setInternalPrefixes(java.util.Arrays.asList(internalPrefixes.split(LIST_SPLIT_REGEX)));
         c.setExpandInternalLib(expandAll);
-        c.setExpandAllForPlainJar(expandAll);
         c.setMaxEntryBytes(8L * 1024 * 1024);
         return c;
     }

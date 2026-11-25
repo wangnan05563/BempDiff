@@ -106,7 +106,6 @@ public final class CompareOptions {
         ParseConfig c = new ParseConfig();
         c.setInternalPrefixes(java.util.Arrays.asList(internalPrefixes.split("[,;\\s]+")));
         c.setExpandInternalLib(expandAll);
-        c.setExpandAllForPlainJar(expandAll);
         c.setMaxEntryBytes(8L * 1024 * 1024);
         c.setIgnoreExtensions(ignoreExtensions);
         return c;

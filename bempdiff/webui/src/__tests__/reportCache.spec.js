@@ -46,8 +46,8 @@ describe('reportCache 类别维度缓存', () => {
     await settle()
     const mdBreaking = state.reportMd
     expect(mdRisk).not.toBe(mdBreaking)                 // 内容不同
-    expect(state.reportCache['ai:risk']).toBe(mdRisk)   // 各自按类别缓存
-    expect(state.reportCache['ai:breaking']).toBe(mdBreaking)
+    expect(state.reportCache['ai:risk@j1']).toBe(mdRisk)   // 各自按类别缓存（H-07：键带 jobId）
+    expect(state.reportCache['ai:breaking@j1']).toBe(mdBreaking)
     expect(api.report).toHaveBeenCalledTimes(2)         // 两次真实调用
   })
 
@@ -67,13 +67,13 @@ describe('reportCache 类别维度缓存', () => {
     await generateReport(true, { category: 'risk', force: true })
     await settle()
     expect(api.report).toHaveBeenCalledTimes(2)         // force 会再调一次
-    expect(state.reportCache['ai:risk']).toBe(state.reportMd)
+    expect(state.reportCache['ai:risk@j1']).toBe(state.reportMd)
   })
 
   it('C4 基础报告（非 AI）缓存键为 base', async () => {
     await generateReport(false)
     await settle()
-    expect(state.reportCache['base']).toBe(state.reportMd)
+    expect(state.reportCache['base@j1']).toBe(state.reportMd)
     await generateReport(false)
     await settle()
     expect(api.report).toHaveBeenCalledTimes(1)         // 基础报告同样命中缓存

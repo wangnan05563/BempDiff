@@ -10,6 +10,7 @@ const { app, BrowserWindow, ipcMain, dialog, screen, shell, Menu, Tray, nativeIm
 const path = require('node:path')
 const fs = require('node:fs')
 const net = require('node:net')
+const crypto = require('node:crypto')
 const { spawn, spawnSync } = require('node:child_process')
 const http = require('node:http')
 const closeBehaviorStore = require('./close-behavior')
@@ -17,6 +18,9 @@ const closeBehaviorStore = require('./close-behavior')
 // ---------- 配置 ----------
 const PORT = 18765
 const DEV_PORT = parseInt(process.env.BEMPDIFF_DEV_PORT || '5180', 10)
+// 每次启动生成随机会话 token：Java sidecar 通过环境变量拿到同一值，preload 暴露给渲染进程。
+// 浏览器直接访问时由后端首页 Set-Cookie 下发 HttpOnly+SameSite=Strict Cookie，下载直链无需 header。
+const API_TOKEN = crypto.randomBytes(32).toString('hex')
 const DEFAULT_W = 1280
 const DEFAULT_H = 900
 const MIN_W = 960
@@ -355,7 +359,7 @@ async function startBackend() {
     windowsHide: true, // 关键：不弹 Java 控制台窗口
     detached: true,
     stdio: ['ignore', out, out], // 日志落盘（打不开则 ignore），不污染任何控制台
-    env: process.env
+    env: { ...process.env, BEMPDIFF_API_TOKEN: API_TOKEN }
   })
   children.push(child)
   backendPid = child.pid || null // 记录后端主进程 PID，退出时用 taskkill /T 强杀整棵进程树
@@ -385,23 +389,25 @@ async function startFrontend() {
   if (!useVite) return false
   const out = openLog(VITE_LOG)
   // Windows 经 cmd.exe；unix（T01546）经 sh -c，命令语义一致（进 webui 起 vite dev）
+  // VITE_ 前缀让浏览器态（不经 preload）也能通过 import.meta.env 取到同一 token。
+  const viteEnv = { ...process.env, BEMPDIFF_API_TOKEN: API_TOKEN, VITE_BEMPDIFF_API_TOKEN: API_TOKEN }
   const child = process.platform === 'win32'
     ? spawn('cmd.exe',
-      ['/c', `cd /d bempdiff\\webui && npm run dev -- --port ${DEV_PORT} --host 127.0.0.1`],
+      ['/c', `cd /d bempdiff\\webui && npm run dev -- --port ${DEV_PORT} --host 127.0.0.1 --strictPort`],
       {
         cwd: ROOT,
         windowsHide: true,
         detached: true,
         stdio: ['ignore', out, out],
-        env: process.env
+        env: viteEnv
       })
     : spawn('sh',
-      ['-c', `cd bempdiff/webui && npm run dev -- --port ${DEV_PORT} --host 127.0.0.1`],
+      ['-c', `cd bempdiff/webui && npm run dev -- --port ${DEV_PORT} --host 127.0.0.1 --strictPort`],
       {
         cwd: ROOT,
         detached: true,
         stdio: ['ignore', out, out],
-        env: process.env
+        env: viteEnv
       })
   children.push(child)
   appendLog(VITE_LOG, '[sidecar] vite started PID', child.pid)
@@ -802,6 +808,7 @@ ipcMain.handle('bempdiff:set-close-behavior', (_event, cfg) => {
 // 打包后 app.getVersion() 读的是 asar 内 package.json 版本，即安装包版本；
 // 前端「关于/更新检查」据此上报 current，避免回落内置常量导致恒报「发现新版本」。
 ipcMain.on('bempdiff:app-version', (event) => { event.returnValue = app.getVersion() })
+ipcMain.on('bempdiff:api-token', (event) => { event.returnValue = API_TOKEN })
 
 // ---------- 版本更新：一键下载更新包并触发安装（来自 About「立即更新」） ----------
 // 前端只传 GitHub Release 的 .exe 资产下载 URL；主进程下载到系统下载目录（Downloads），

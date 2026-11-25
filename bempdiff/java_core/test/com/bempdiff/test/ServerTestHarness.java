@@ -35,17 +35,61 @@ public final class ServerTestHarness {
     public static final class Server {
         public final int port;
         public final String base;
+        public final String token;
+        private static final String REQUEST_GUARD = "X-BempDiff-Request";
         private final HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10)).build();
 
-        Server(int port) { this.port = port; this.base = "http://127.0.0.1:" + port; }
+        Server(int port, String token) { this.port = port; this.base = "http://127.0.0.1:" + port; this.token = token; }
 
-        HttpResponse<String> request(String method, String path, String body) throws Exception {
+        private HttpRequest.Builder builder(String method, String path, String body, boolean guard, boolean token) {
             HttpRequest.BodyPublisher pub = body == null
                     ? HttpRequest.BodyPublishers.noBody()
                     : HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8);
             HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path))
                     .timeout(Duration.ofSeconds(30)).method(method, pub);
+            if (guard) b.header(REQUEST_GUARD, "1");
+            if (token && this.token != null) b.header("X-BempDiff-Token", this.token);
+            return b;
+        }
+
+        HttpResponse<String> request(String method, String path, String body) throws Exception {
+            return client.send(builder(method, path, body, true, true).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        }
+
+        /** 故意不带本机请求头，用于验证 CSRF 防护拒绝跨站变更请求（token 仍有效）。 */
+        HttpResponse<String> requestNoGuard(String method, String path, String body) throws Exception {
+            return client.send(builder(method, path, body, false, true).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        }
+
+        /** 故意不带 token，用于验证所有 API 都需要会话认证。 */
+        HttpResponse<String> requestNoToken(String method, String path, String body) throws Exception {
+            return client.send(builder(method, path, body, true, false).build(),
+                    HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        }
+
+        /** 带自定义 Origin / Sec-Fetch-Site，用于验证跨站来源被拒绝。 */
+        HttpResponse<String> requestWithOrigin(String method, String path, String origin, String fetchSite)
+                throws Exception {
+            HttpRequest.Builder b = builder(method, path, null, true, true);
+            if (origin != null) b.header("Origin", origin);
+            if (fetchSite != null) b.header("Sec-Fetch-Site", fetchSite);
+            return client.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        }
+
+        /** 指定 token（可为错误值），验证 token 强校验。 */
+        HttpResponse<String> requestWithToken(String method, String path, String tokenValue) throws Exception {
+            HttpRequest.Builder b = builder(method, path, null, true, false);
+            if (tokenValue != null) b.header("X-BempDiff-Token", tokenValue);
+            return client.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        }
+
+        /** 只带 Cookie，验证浏览器首页下发会话 Cookie 后可直接访问 API/下载直链。 */
+        HttpResponse<String> requestWithCookie(String method, String path, String cookie) throws Exception {
+            HttpRequest.Builder b = builder(method, path, null, true, false);
+            b.header("Cookie", cookie);
             return client.send(b.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         }
 
@@ -56,14 +100,17 @@ public final class ServerTestHarness {
         HttpResponse<String> options(String path) throws Exception { return request("OPTIONS", path, null); }
 
         HttpResponse<byte[]> getRaw(String path) throws Exception {
-            return client.send(HttpRequest.newBuilder(URI.create(base + path))
-                    .timeout(Duration.ofSeconds(30)).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+            HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path))
+                    .timeout(Duration.ofSeconds(30)).header(REQUEST_GUARD, "1").GET();
+            if (token != null) b.header("X-BempDiff-Token", token);
+            return client.send(b.build(), HttpResponse.BodyHandlers.ofByteArray());
         }
 
         HttpResponse<byte[]> postRaw(String path, String body) throws Exception {
-            return client.send(HttpRequest.newBuilder(URI.create(base + path))
-                    .timeout(Duration.ofSeconds(30))
-                    .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
+            HttpRequest.Builder b = HttpRequest.newBuilder(URI.create(base + path))
+                    .timeout(Duration.ofSeconds(30)).header(REQUEST_GUARD, "1");
+            if (token != null) b.header("X-BempDiff-Token", token);
+            return client.send(b.POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8)).build(),
                     HttpResponse.BodyHandlers.ofByteArray());
         }
     }
@@ -91,7 +138,7 @@ public final class ServerTestHarness {
         t.setDaemon(true);
         t.start();
         awaitPort(port);
-        return new Server(port);
+        return new Server(port, server.apiToken());
     }
 
     /** 轮询直到端口可建立 TCP 连接（服务已 bind）。 */

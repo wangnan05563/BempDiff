@@ -83,7 +83,13 @@ function saveUiLayout() {
   } catch (_) { /* 存储不可用静默 */ }
 }
 onMounted(loadUiLayout)
-watch([treeW, aiW, aiResized, treeResized], saveUiLayout)
+// M-17：拖拽 pointermove 每帧改宽度，不能每次同步写 localStorage；150ms 合并一次。
+let layoutSaveTimer = null
+function scheduleSaveUiLayout() {
+  if (layoutSaveTimer) clearTimeout(layoutSaveTimer)
+  layoutSaveTimer = setTimeout(() => { layoutSaveTimer = null; saveUiLayout() }, 150)
+}
+watch([treeW, aiW, aiResized, treeResized], scheduleSaveUiLayout, { flush: 'post' })
 // 切换新旧 IA 时重新按断点决定右栏收起态（显式偏好仍优先）。
 watch(() => state.reviewCockpit, () => applyAiPanelResponsive())
 // tabs/pin/激活页变化时落盘；恢复失败不阻塞启动（store 内部已 catch）。
@@ -93,10 +99,17 @@ function scheduleSaveTabLayout() {
   if (tabSaveTimer) clearTimeout(tabSaveTimer)
   tabSaveTimer = setTimeout(() => { tabSaveTimer = null; saveTabLayout() }, 300)
 }
-watch([() => state.tabs, () => state.activeKey, () => state.job], scheduleSaveTabLayout, { deep: true })
+// M-17：只观察布局相关浅字段，不 deep 遍历 state.tabs（其中可能含大体积 decompile 数据）。
+function tabLayoutFingerprint() {
+  const tabs = Array.isArray(state.tabs) ? state.tabs : []
+  const body = tabs.map(t => `${t && t.key}:${t && t.pinned ? 1 : 0}:${Number(t && t.scroll) || 0}:${(t && t.node && (t.node.path || t.node.key)) || ''}`).join('|')
+  return `${body}#${state.activeKey || ''}#${(state.job && state.job.jobId) || ''}#${state.oldPath || ''}#${state.newPath || ''}#${state.leftType || ''}`
+}
+watch(() => tabLayoutFingerprint(), scheduleSaveTabLayout, { flush: 'post' })
 onMounted(() => window.addEventListener('beforeunload', saveTabLayout))
 onBeforeUnmount(() => {
-  if (tabSaveTimer) clearTimeout(tabSaveTimer)
+  if (tabSaveTimer) { clearTimeout(tabSaveTimer); tabSaveTimer = null; saveTabLayout() }
+  if (layoutSaveTimer) { clearTimeout(layoutSaveTimer); layoutSaveTimer = null; saveUiLayout() }
   window.removeEventListener('beforeunload', saveTabLayout)
 })
 

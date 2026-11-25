@@ -36,6 +36,26 @@ public final class AstNormalizer {
 
     /** 降级计数（解析失败/超限）：观测口径，供验证与报告提示。 */
     private static final AtomicInteger DEGRADED = new AtomicInteger();
+    /** 当前作业线程内的降级计数；比对任务在单线程执行，避免报告串到其他作业的历史累计值。 */
+    private static final ThreadLocal<AtomicInteger> JOB_DEGRADED = new ThreadLocal<>();
+
+    /** 比对作业开始时调用；同一线程结束时必须调用 {@link #endJobScope()}。 */
+    public static void beginJobScope() {
+        JOB_DEGRADED.set(new AtomicInteger());
+    }
+
+    /** 返回本作业线程内的降级次数并清除线程局部，防止虚拟线程复用时串作业。 */
+    public static int endJobScope() {
+        AtomicInteger c = JOB_DEGRADED.get();
+        JOB_DEGRADED.remove();
+        return c == null ? 0 : c.get();
+    }
+
+    private static void markDegraded() {
+        DEGRADED.incrementAndGet();
+        AtomicInteger c = JOB_DEGRADED.get();
+        if (c != null) c.incrementAndGet();
+    }
 
     /** 成员排序单元：sortKey=种类+规范化文本（去重排序），body=规范化文本。 */
     private static final class Member {
@@ -59,7 +79,7 @@ public final class AstNormalizer {
     public static String normalizeOrNull(String src) {
         if (src == null || src.isEmpty()) return null;
         if (src.length() > MAX_SRC_CHARS) {
-            DEGRADED.incrementAndGet();
+            markDegraded();
             return null;
         }
         try {
@@ -79,7 +99,7 @@ public final class AstNormalizer {
             Iterable<? extends CompilationUnitTree> units = task.parse();
             for (javax.tools.Diagnostic<? extends JavaFileObject> d : diags.getDiagnostics()) {
                 if (d.getKind() == javax.tools.Diagnostic.Kind.ERROR) {
-                    DEGRADED.incrementAndGet();
+                    markDegraded();
                     return null;
                 }
             }
@@ -96,13 +116,13 @@ public final class AstNormalizer {
             }
             // 无任何类型声明（纯 package-info 等）→ AST 口径无意义，降级
             if (!anyType || out.length() == 0) {
-                DEGRADED.incrementAndGet();
+                markDegraded();
                 return null;
             }
             return out.toString();
         } catch (Throwable t) {
             // 解析失败（非法源码）→ 降级行级；catch Throwable 是刻意的降级兜底（任何解析器内部错误都不应中断比对主流程）
-            DEGRADED.incrementAndGet();
+            markDegraded();
             return null;
         }
     }

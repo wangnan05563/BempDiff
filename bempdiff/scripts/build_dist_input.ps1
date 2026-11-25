@@ -259,6 +259,10 @@ if (-not $SkipFrontend) {
   Remove-Tree $dest
   New-Item -ItemType Directory -Force -Path $dest | Out-Null
   robocopy $WebuiDist $dest /E /R:2 /W:2 /NFL /NDL | Out-Null
+  # H-11：robocopy 是原生程序，$ErrorActionPreference 不会因退出码失败；>=8 才是真失败。
+  # 0-7 都表示成功/有复制（1=复制了文件），不能把正常复制误判成失败。
+  $rc = $LASTEXITCODE
+  if ($rc -ge 8) { throw "robocopy 镜像前端失败，退出码 $rc（$WebuiDist → $dest）" }
   Write-Host "  -> $dest"
 } else {
   Write-Host "跳过前端构建（复用已有 dist_input/webui）"
@@ -276,8 +280,18 @@ function Assert-InputFresh {
       throw "SkipJava 复用旧 jar（$jarT）早于最新源码（$newestSrc），会打包旧后端。请去掉 -SkipJava 重新编译。"
     }
   }
-  if ($SkipFrontend -and -not (Test-Path (Join-Path $DistInput 'webui\index.html'))) {
-    throw "SkipFrontend 复用但 dist_input/webui 前端缺失，会打包空/旧前端。请去掉 -SkipFrontend。"
+  if ($SkipFrontend) {
+    $distIndex = Join-Path $DistInput 'webui\index.html'
+    if (-not (Test-Path $distIndex)) {
+      throw "SkipFrontend 复用但 dist_input/webui 前端缺失，会打包空/旧前端。请去掉 -SkipFrontend。"
+    }
+    # H-11：仅判断 index.html 存在不够；前端源码比镜像产物新时必须拒绝，否则会打包旧 UI。
+    $newestWebui = (Get-ChildItem -Recurse -File (Join-Path $Webui 'src') |
+      Sort-Object LastWriteTime -Descending | Select-Object -First 1).LastWriteTime
+    $distT = (Get-Item $distIndex).LastWriteTime
+    if ($distT -lt $newestWebui) {
+      throw "SkipFrontend 复用的前端（$distT）早于最新 webui/src（$newestWebui），会打包旧 UI。请去掉 -SkipFrontend。"
+    }
   }
 }
 Assert-InputFresh

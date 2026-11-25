@@ -109,7 +109,17 @@ function downloadHtml() {
 }
 
 /** T06221 审阅 JSON 导出：与报告同源；excludeNotes 时剔除所有备注正文。 */
+const reviewExportReady = computed(() => {
+  const jobId = state.job && state.job.jobId
+  return !!jobId && !!state.review && state.review.jobId === jobId && !state.reviewLoading
+})
+
 function downloadReviewJson() {
+  // M-18：job 已切到 B、review 仍是 A/空文档时不能导出，否则 JSON 带错 jobId 或漏备注。
+  if (!reviewExportReady.value) {
+    toast('warning', t('rp.reviewJsonNotReady'))
+    return
+  }
   try {
     const data = buildReviewJsonExport(state.review, { excludeNotes: excludeNotes.value })
     const name = triggerBlobDownload(
@@ -190,7 +200,7 @@ function downloadReviewJson() {
             <i class="bi bi-filetype-html"></i> {{ t('rp.exportHtml') }}
           </button>
           <button v-if="!srcIsTask" id="rp-export-review-json" class="btn btn-outline-secondary btn-sm"
-                  :disabled="!state.job" @click="downloadReviewJson" :title="t('rp.reviewJsonTitle')">
+                  :disabled="!reviewExportReady" @click="downloadReviewJson" :title="t('rp.reviewJsonTitle')">
             <i class="bi bi-braces"></i> {{ t('rp.exportReviewJson') }}
           </button>
           <button v-if="!srcIsTask" class="btn btn-outline-primary btn-sm" :disabled="!state.job || state.busy"

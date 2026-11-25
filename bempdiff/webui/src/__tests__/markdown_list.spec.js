@@ -25,4 +25,10 @@ describe('renderMarkdown 列表结构', () => {
     expect((html.match(/<ul /g) || []).length).toBe(3)
     expect((html.match(/<\/ul>/g) || []).length).toBe(3)
   })
+
+  it('4 个反引号的围栏能包住正文里的 3 个反引号（M-03）', () => {
+    const html = renderMarkdown('````text\nalpha\n```\nbeta\n````')
+    expect(html).toContain('<pre class="md-pre"><code>alpha\n```\nbeta</code></pre>')
+    expect(html).not.toContain('````')
+  })
 })

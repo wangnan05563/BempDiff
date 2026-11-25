@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import { api } from './api/client'
+import { authHeaders } from './lib/api_auth'
 import { activateTab as activateTabImpl, closeTabReducer as closeTabImpl, pinTabReducer as pinTabImpl,
   closeOtherTabsReducer as closeOtherTabsImpl, closeAllTabsReducer as closeAllTabsImpl, findActiveTab } from './lib/tabs'
 import { extractFromFileName, sameBaseDifferentVersion, orderOldNew } from './lib/version'
@@ -211,6 +212,12 @@ const LEGACY_REVIEW_KEY = 'bempdiff.reviewed'
 const REVIEW_CACHE_PREFIX = 'bempdiff.review.cache.'
 let reviewSaveTimer = null
 let reviewLoadSeq = 0
+// H-08：本地审阅版本号 + 串行保存链。旧 PUT 响应不能覆盖新编辑，也不能让旧请求最后落盘。
+let reviewRevision = 0
+let reviewSaveChain = Promise.resolve()
+// H-07：异步报告/洞察/分类结果必须绑定发起时的 jobId，切作业后旧响应不得写进新视图。
+let reportRunSeq = 0
+let classifyRunSeq = 0
 
 export function reviewFileInfo(key) {
   const f = state.review && state.review.files ? state.review.files[key] : null
@@ -263,6 +270,7 @@ function dropLegacyJob(jobId) {
 }
 
 function applyReviewDoc(doc) {
+  reviewRevision++
   state.review = normalizeReviewDoc(doc, doc && doc.jobId)
   state.reviewSummary = summarizeReview(state.review.files)
   syncInsightsReview()
@@ -274,6 +282,7 @@ export function updateReviewFileState(key, patch) {
   if (!key) return null
   const before = state.review && state.review.files ? state.review.files[key] : null
   const next = updateReviewFile(state.review, key, patch)
+  reviewRevision++
   state.review = next
   state.reviewSummary = summarizeReview(next.files)
   syncInsightsReview()
@@ -365,25 +374,41 @@ function scheduleReviewSave(delay = 80) {
   }, delay)
 }
 
-/** 立即落盘（切文件/页面隐藏/退出前调用）。keepalive=true 供 beforeunload 尽力送达。 */
-export async function flushReview(opts = {}) {
+/** 立即落盘（切文件/页面隐藏/退出前调用）。keepalive=true 供 beforeunload 尽力送达。
+ *  H-08：普通保存串行执行，避免两个 PUT 乱序落盘；响应只在“发起后本地没有新编辑”时回填。 */
+export function flushReview(opts = {}) {
   if (reviewSaveTimer) { clearTimeout(reviewSaveTimer); reviewSaveTimer = null }
+  if (opts.keepalive) return flushReviewNow(opts)
+  const run = () => flushReviewNow(opts)
+  const p = reviewSaveChain.then(run, run)
+  reviewSaveChain = p.catch(() => {})
+  return p
+}
+
+async function flushReviewNow(opts = {}) {
   const doc = state.review
   const jobId = doc && doc.jobId
   if (!jobId) return
+  const revision = reviewRevision
   state.reviewSaveState = 'saving'
   try {
     const resp = await api.putReview(jobId, doc, opts)
-    if (resp && resp.files && state.review.jobId === jobId) {
-      state.review = normalizeReviewDoc(resp, jobId)
-      state.reviewSummary = summarizeReview(state.review.files)
+    const stillCurrent = revision === reviewRevision && state.review.jobId === jobId
+    if (stillCurrent && resp && resp.files) {
+      applyReviewDoc(resp)
       writeReviewCache(state.review)
     }
-    state.reviewSaveState = 'saved'
-    state.reviewError = ''
+    if (stillCurrent) {
+      state.reviewSaveState = 'saved'
+      state.reviewError = ''
+    }
   } catch (e) {
-    state.reviewSaveState = 'error'
-    state.reviewError = e.message || String(e)
+    if (revision === reviewRevision && state.review.jobId === jobId) {
+      state.reviewSaveState = 'error'
+      state.reviewError = e.message || String(e)
+      throw e
+    }
+    // 旧版本保存失败：本地已有更新编辑，保留 pending 等下一轮保存，不把错误盖到新状态上。
     throw e
   }
 }
@@ -402,6 +427,20 @@ export function loadReviewForJob(jobId) {
   return p
 }
 
+/** 服务端与本地缓存都有文档时，按 updatedAt 判断本地是否更新（本地未落盘编辑不能被旧服务端覆盖）。 */
+function cachedReviewIsNewer(cached, server) {
+  if (!cached || !server) return false
+  const c = Date.parse(cached.updatedAt || '')
+  const s = Date.parse(server.updatedAt || '')
+  if (Number.isFinite(c) && !Number.isFinite(s)) return true
+  if (Number.isFinite(c) && Number.isFinite(s)) {
+    if (c > s) return true
+    // 同一秒内保存时 updatedAt 可能相等；本地文件数更多说明本地有未同步记录。
+    if (c === s && Object.keys(cached.files || {}).length > Object.keys(server.files || {}).length) return true
+  }
+  return false
+}
+
 /** 读取当前 job 审阅文档：服务端 → window 缓存 → 旧 localStorage 迁移。 */
 async function doLoadReviewForJob(jobId) {
   const seq = ++reviewLoadSeq
@@ -414,6 +453,14 @@ async function doLoadReviewForJob(jobId) {
     const server = await api.getReview(jobId, {})
     if (seq !== reviewLoadSeq) return
     if (server && server.exists) {
+      const cached = readReviewCache(jobId)
+      if (cachedReviewIsNewer(cached, server)) {
+        applyReviewDoc(cached)
+        state.reviewMigration = { status: 'recovered', message: '本地审阅缓存比服务端新，正在补写回服务端' }
+        state.reviewSaveState = 'pending'
+        scheduleReviewSave(0)
+        return
+      }
       applyReviewDoc(server)
       state.reviewSaveState = 'saved'
       writeReviewCache(state.review)
@@ -424,6 +471,7 @@ async function doLoadReviewForJob(jobId) {
     if (cached && Object.keys(cached.files).length) {
       applyReviewDoc(cached)
       state.reviewMigration = { status: 'recovered', message: '已从本地缓存恢复审阅记录' }
+      state.reviewSaveState = 'pending'
       scheduleReviewSave(0)
       return
     }
@@ -431,21 +479,34 @@ async function doLoadReviewForJob(jobId) {
     const migrated = migrateLegacyReviews(legacyJob, jobId, state.review.user)
     if (!migrated) return
     applyReviewDoc(migrated)
+    state.reviewSaveState = 'pending'
+    const revision = reviewRevision
     try {
       const saved = await api.putReview(jobId, migrated)
       if (seq === reviewLoadSeq) {
-        applyReviewDoc(saved)
-        state.reviewSaveState = 'saved'
-        writeReviewCache(state.review)
+        if (revision === reviewRevision) {
+          applyReviewDoc(saved)
+          state.reviewSaveState = 'saved'
+          writeReviewCache(state.review)
+        } else {
+          // 迁移请求期间用户已有新编辑：保留本地，交给防抖保存链补写。
+          state.reviewSaveState = 'pending'
+          scheduleReviewSave(0)
+        }
       }
       dropLegacyJob(jobId)
-      state.reviewMigration = { status: 'migrated', message: '旧版行级标记已迁移到文件级审阅' }
-      toast('success', '已将旧版行级审阅标记迁移到文件级审阅记录')
+      if (seq === reviewLoadSeq) {
+        state.reviewMigration = { status: 'migrated', message: '旧版行级标记已迁移到文件级审阅' }
+        toast('success', '已将旧版行级审阅标记迁移到文件级审阅记录')
+      }
     } catch (e) {
       // PRD 要求失败保留旧数据并提示；不回滚本地已展示的迁移结果，避免用户看不懂「标记消失」。
-      state.reviewMigration = { status: 'failed', message: e.message || String(e) }
-      state.reviewError = e.message || String(e)
-      toast('warning', '旧审阅标记迁移失败，旧数据已保留：' + (e.message || e))
+      if (seq === reviewLoadSeq) {
+        state.reviewMigration = { status: 'failed', message: e.message || String(e) }
+        state.reviewError = e.message || String(e)
+        state.reviewSaveState = 'error'
+        toast('warning', '旧审阅标记迁移失败，旧数据已保留：' + (e.message || e))
+      }
     }
   } catch (e) {
     if (seq !== reviewLoadSeq) return
@@ -489,6 +550,7 @@ export function resetInsights() {
 export async function loadInsights(jobId = currentJobId(), opts = {}) {
   if (!jobId) return null
   const seq = ++insightsSeq
+  state.insights = null
   state.insightsLoading = true
   state.insightsError = ''
   try {
@@ -580,7 +642,17 @@ export async function jumpToHunk(key, hunkIndex = 0) {
 // 页面隐藏/关闭前尽力落盘：80ms 防抖窗口内的最后一次标记不丢（AC 持久化）。
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
-    if (!state.review || !state.review.jobId || !reviewSaveTimer) return
+    if (!state.review || !state.review.jobId) return
+    const dirty = !!reviewSaveTimer || state.reviewSaveState === 'pending' ||
+      state.reviewSaveState === 'saving' || state.reviewSaveState === 'error'
+    if (!dirty) return
+    // keepalive 请求体通常受 64KiB 限制；超大审阅文档不能可靠送达，交给 80ms 防抖/页面隐藏路径。
+    let bytes = 0
+    try {
+      const raw = JSON.stringify(state.review)
+      bytes = typeof TextEncoder !== 'undefined' ? new TextEncoder().encode(raw).length : raw.length
+    } catch (_) { return }
+    if (bytes > 60 * 1024) return
     flushReview({ keepalive: true }).catch(() => {})
   })
   document.addEventListener('visibilitychange', () => {
@@ -878,12 +950,90 @@ export function normalizeComparePath(p) {
   return s
 }
 
+/** H-07：切换/打开作业前清空所有与上一个 job 绑定的视图缓存；避免旧报告、旧 AI、旧洞察串到新树。 */
+export function resetJobViewState() {
+  reportRunSeq++
+  classifyRunSeq++
+  for (const t of state.aiTasks) {
+    const c = aiControllers.get(t.id)
+    if (c) c.abort()
+  }
+  aiControllers.clear()
+  state.aiTasks = []
+  state.aiActiveTaskId = null
+  state.tabs = []
+  state.activeKey = null
+  state.reportMd = null
+  state.reportAi = false
+  state.reportCategory = null
+  state.reportCache = {}
+  state.aiClassify = {}
+  state.aiEstimate = null
+  state.aiEstimateKey = null
+  state.costGate = null
+  state.archiveChildren = {}
+  state.expandedArchives = {}
+  state.excludedKeys = {}
+  state.baseFolder = null
+  state.propertyNode = null
+  state.hunkJump = null
+  state.reviewAdvanceTick = 0
+  state.compareStartedAt = null
+  state.compareStalled = false
+  state.stallNotified = false
+  state.reporting = false
+  state.analyzing = false
+  state.classifying = false
+  state.busy = false
+  state.error = null
+  resetInsights()
+  resetReview()
+}
+
 export async function runCompare({ leftType, leftPath, rightPath, options }) {
+  // M-12：所有入口最终都经过这里；已在比对/生成报告时不再创建第二个 job。
+  if (state.busy) {
+    toast('warning', '已有任务正在进行，请等待完成后再开始比对')
+    return false
+  }
+  // H-08：新比对会 resetReview，先把上一个作业未落盘的审阅记录送出去；失败就不开始，
+  // 否则旧记录会随着 reset 永久丢失。
+  if (state.review && state.review.jobId && state.reviewSaveState !== 'saved' && state.reviewSaveState !== 'idle') {
+    try {
+      await flushReview()
+    } catch (e) {
+      state.error = '审阅记录保存失败，未开始新比对：' + (e.message || e)
+      toast('error', state.error)
+      return false
+    }
+  }
   // P2-5：判断两侧是否指向同一路径（Windows 大小写/斜杠/尾斜杠归一）。
   // 同一输入的 0 差异不等于「两个包完全一致」，结果区需要给出准确说明。
   state.sameInputCompare = normalizeComparePath(leftPath) === normalizeComparePath(rightPath)
+  // H-06：取消比对时要把上一个作业的审阅/洞察/分类/排除状态恢复回来；先快照，成功后再丢弃。
+  const previousView = {
+    review: state.review,
+    reviewSaveState: state.reviewSaveState,
+    reviewError: state.reviewError,
+    insights: state.insights,
+    aiClassify: state.aiClassify,
+    excludedKeys: state.excludedKeys,
+    baseFolder: state.baseFolder,
+    propertyNode: state.propertyNode,
+    hunkJump: state.hunkJump,
+    reviewAdvanceTick: state.reviewAdvanceTick,
+    aiEstimate: state.aiEstimate,
+    aiEstimateKey: state.aiEstimateKey,
+    costGate: state.costGate
+  }
+  // H-07：新比对开始即让旧报告请求失效，避免旧 job 的报告在成功切换后写进新视图。
+  reportRunSeq++
+  classifyRunSeq++
+  state.reporting = false
+  state.analyzing = false
   resetReview()             // 新 job：旧审阅文档立即让位，避免旧进度串到新结果
   resetInsights()           // 新 job：旧兼容/影响数据不得串到新树
+  state.reviewAdvanceTick = 0
   state.busy = true
   state.busyText = '正在提交比对任务…'
   state.error = null
@@ -896,9 +1046,10 @@ export async function runCompare({ leftType, leftPath, rightPath, options }) {
   state.baseFolder = null
   state.propertyNode = null
   state.jobProgress = { status: 'queued', progress: 0, phase: 'queued', message: '已提交，等待处理' }
+  let jobId = null
   try {
     const r = await api.compare({ leftType, leftPath, rightPath, options })
-    const jobId = r.jobId
+    jobId = r.jobId
     // T02741：不再按版本号自动重排——左框即老包、右框即新包，方向完全由用户显式放置决定，
     // 故移除「已自动按版本排序」提示；oldVersion/newVersion 仍用于状态栏展示文件名版号。
     state.activeCompareId = jobId
@@ -909,7 +1060,31 @@ export async function runCompare({ leftType, leftPath, rightPath, options }) {
       message: r.message || '已提交'
     }
     const final = await pollJob(jobId)
-    if (!final) return true // 已取消 / 被新比对取代 → 不清空旧结果，直接返回（作业确实提交成功过）
+    if (!final) {
+      // 用户取消 / 被新比对取代：只有仍是当前作业（或被取消置空）时才恢复上一作业视图；
+      // 若已有新作业抢占 activeCompareId，不能把旧状态盖到新作业上。
+      if (state.activeCompareId === jobId || state.activeCompareId === null) {
+        state.insights = previousView.insights
+        state.aiClassify = previousView.aiClassify
+        state.excludedKeys = previousView.excludedKeys
+        state.baseFolder = previousView.baseFolder
+        state.propertyNode = previousView.propertyNode
+        state.hunkJump = previousView.hunkJump
+        state.reviewAdvanceTick = previousView.reviewAdvanceTick
+        state.aiEstimate = previousView.aiEstimate
+        state.aiEstimateKey = previousView.aiEstimateKey
+        state.costGate = previousView.costGate
+        applyReviewDoc(previousView.review)
+        state.reviewSaveState = previousView.reviewSaveState
+        state.reviewError = previousView.reviewError
+        if (previousView.review && previousView.review.jobId &&
+            (previousView.reviewSaveState === 'pending' || previousView.reviewSaveState === 'saving')) {
+          state.reviewSaveState = 'pending'
+          scheduleReviewSave(0)
+        }
+      }
+      return false // 已取消：triggerCompare 不写历史、openSample 不报“示例已打开”
+    }
     state.job = final
     await loadReviewForJob(jobId)
     await loadInsights(jobId)
@@ -922,7 +1097,10 @@ export async function runCompare({ leftType, leftPath, rightPath, options }) {
     state.tabs = []
     state.activeKey = null
     state.reportMd = null
+    state.reportAi = false
+    state.reportCategory = null
     state.reportCache = {}   // 新一轮比对：清空报告缓存（旧报告与旧树 key 不再对应）
+    state.hunkJump = null
     state.archiveChildren = {}   // 新一轮比对：清空归档展开缓存
     state.expandedArchives = {}
     toast('success', `比对完成：新增 ${final.stats.added} · 删除 ${final.stats.deleted} · 修改 ${final.stats.modified}`)
@@ -954,9 +1132,14 @@ export async function runCompare({ leftType, leftPath, rightPath, options }) {
     toast('danger', '比对失败：' + state.error)
     return false
   } finally {
-    state.busy = false
-    state.jobProgress = null
-    state.activeCompareId = null
+    // H-06：旧作业的 finally 不能把新作业的 busy / activeCompareId 清掉（快速连续比对时）。
+    // jobId 为空表示提交阶段就失败，没有任何新作业可抢；只有此时才无条件清。
+    if ((!jobId && state.activeCompareId == null) ||
+        (jobId && (state.activeCompareId === jobId || state.activeCompareId === null))) {
+      state.busy = false
+      state.jobProgress = null
+      if (jobId) state.activeCompareId = null
+    }
   }
 }
 
@@ -990,6 +1173,15 @@ export function buildOptions() {
  *  CX-09：默认先走只读预检；阻断项直接弹确认框（继续按钮禁用），警告项允许“仍然继续”。
  *  `skipPreflight` 仅供预检弹窗“继续”复用同一 payload 时使用，避免用户点一次比对却预检两次。 */
 export async function triggerCompare(opts = {}) {
+  // M-12：双击/连续拖拽不能重复创建 job；预检弹窗未确认时也不能再发起。
+  if (state.busy || state.preflightBusy) {
+    toast('warning', '已有任务正在进行，请等待完成后再开始比对')
+    return false
+  }
+  if (state.preflight) {
+    toast('warning', '请先处理当前预检确认框')
+    return false
+  }
   const payload = (opts && opts.payload) ? opts.payload : {
     leftType: state.leftType,
     leftPath: (state.oldPath || '').trim(),
@@ -1553,11 +1745,14 @@ export async function generateReport(ai, opts = {}) {
   // 避免「点了没反应、无遮罩、无提示」。此前 ToolBar 入口未守卫，会静默 return 导致同一症状。
   if (!state.job) { toast('warning', '请先完成一次比对，再生成报告'); return }
   if (state.reporting) return // 防止自动报告与手动报告并发重叠（后到者直接放弃，避免 reportMd 互相覆盖）
+  const reportJobId = state.job.jobId
+  const runSeq = ++reportRunSeq
   // 分析项：显式传入优先（InfoPanel 破坏性→breaking / 审计→risk / ReportPreview 沿用上次）；否则用共享下拉当前选择。
   const category = opts.category || state.aiSelCategory
   const prompt = opts.prompt || null
   // 报告缓存键：'ai:<category>' 区分各 AI 分析项，'base' 为无 AI 基础报告——多类别报告并存互不覆盖。
-  const cacheKey = ai ? 'ai:' + (category || 'default') : 'base'
+  // H-07：再带 jobId，打开历史作业 B 后不可能命中作业 A 的同类别报告。
+  const cacheKey = (ai ? 'ai:' + (category || 'default') : 'base') + '@' + (reportJobId || '')
   // 缓存命中短路：同类别报告已生成过则直接展示（秒开），无需再走成本闸门/后端调用。
   // opts.force=true（ReportPreview「重新生成」）强制刷新，绕过缓存。
   if (!opts.force && state.reportCache[cacheKey]) {
@@ -1565,15 +1760,17 @@ export async function generateReport(ai, opts = {}) {
     state.reportAi = ai
     state.reportCategory = ai ? category : null
     if (!opts.silent) toast('info', '已展示该分析项的报告缓存（如需刷新请点「重新生成」）')
-    return
+    return true
   }
   // 成本闸门（P0 #5）：AI 报告超阈值需强制确认；静默自动报告超阈值则跳过并提示手动。
   if (ai) {
     const ok = await ensureAiBudget('report', { silent: !!opts.silent, category, prompt })
     if (!ok) {
       if (opts.silent) toast('warning', 'AI 报告预估超成本阈值，已跳过自动生成，请手动确认后生成')
-      return
+      return false
     }
+    // 成本确认期间作业可能已被切换/关闭；旧作业不得再启动报告。
+    if (runSeq !== reportRunSeq || !state.job || state.job.jobId !== reportJobId) return false
   }
   // 项目级上下文目录：配置开启时随请求透传（后端未收到时亦会回退服务端配置，双保险）
   const projDir = (state.config && state.config.projectContextEnabled) ? (state.config.projectContextDir || null) : null
@@ -1582,18 +1779,30 @@ export async function generateReport(ai, opts = {}) {
   if (silent) state.analyzing = true
   else { state.busy = true; state.busyText = ai ? '正在调用 AI 分析…' : '正在生成报告…' }
   try {
-    const md = await api.report(state.job.jobId, ai, category, prompt, projDir)
+    const md = await api.report(reportJobId, ai, category, prompt, projDir)
+    if (runSeq !== reportRunSeq || !state.job || state.job.jobId !== reportJobId) return false
     state.reportCache[cacheKey] = md
     state.reportMd = md
     state.reportAi = ai
     state.reportCategory = ai ? category : null   // 记录本次分析项，供 ReportPreview「重新生成」沿用
     if (!silent) toast('success', ai ? 'AI 分析报告已生成' : '报告已生成')
+    return true
   } catch (e) {
-    toast('danger', '生成报告失败：' + e.message)
+    if (runSeq === reportRunSeq && state.job && state.job.jobId === reportJobId) {
+      // M-13：失败不能留着上一份报告/缓存，否则 MoreMenu 会直接打开旧报告冒充本次结果。
+      delete state.reportCache[cacheKey]
+      state.reportMd = null
+      state.reportAi = false
+      state.reportCategory = null
+      toast('danger', '生成报告失败：' + (e.message || String(e)))
+    }
+    return false
   } finally {
-    if (silent) state.analyzing = false
-    else state.busy = false
-    state.reporting = false
+    if (runSeq === reportRunSeq) {
+      if (silent) state.analyzing = false
+      else state.busy = false
+      state.reporting = false
+    }
   }
 }
 
@@ -1603,13 +1812,17 @@ export async function runAiClassify() {
   if (!state.job || state.job.status !== 'DONE') { toast('warning', '请先完成一次比对，再进行智能分类'); return }
   if (isRunning()) { toast('warning', '比对仍在进行中，请等待比对完成后，再进行智能分类'); return }
   if (state.classifying) return
+  const jobId = state.job.jobId
+  const runSeq = ++classifyRunSeq
   // 成本闸门（P0 #5）：超阈值强制确认
   const ok = await ensureAiBudget('classify')
   if (!ok) return
+  if (runSeq !== classifyRunSeq || !state.job || state.job.jobId !== jobId) return
   state.classifying = true
   try {
     const projDir = (state.config && state.config.projectContextEnabled) ? (state.config.projectContextDir || null) : null
-    const data = await api.classify(state.job.jobId, projDir)
+    const data = await api.classify(jobId, projDir)
+    if (runSeq !== classifyRunSeq || !state.job || state.job.jobId !== jobId) return
     const map = {}
     for (const it of (data.items || [])) map[it.key] = { risk: it.risk, category: it.category, reason: it.reason }
     state.aiClassify = map
@@ -1617,6 +1830,7 @@ export async function runAiClassify() {
     const total = data.totalChanged || 0
     toast('success', `智能分类完成：已标注 ${cov}/${total} 个变更文件`)
   } catch (e) {
+    if (runSeq !== classifyRunSeq || !state.job || state.job.jobId !== jobId) return
     const msg = (e && e.message) || String(e)
     toast('danger', '智能分类失败：' + msg)
     // 竞态/结果吻合：后端在比对 RUNNING 时拒绝（“比对尚未完成: RUNNING”）。
@@ -1625,7 +1839,7 @@ export async function runAiClassify() {
       toast('info', '比对仍在进行中，请在底部查看“比对进行中”的进度说明，等待比对完成后重试。若超过 5 分钟无进展，请检查磁盘/网络后重启工具。')
     }
   } finally {
-    state.classifying = false
+    if (runSeq === classifyRunSeq) state.classifying = false
   }
 }
 
@@ -1946,7 +2160,7 @@ export async function startExport(granularity = 'all') {
   try {
     const res = await fetch(`/api/job/${encodeURIComponent(state.job.jobId)}/export/start`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ granularity }),
       signal: ctrl.signal
     })

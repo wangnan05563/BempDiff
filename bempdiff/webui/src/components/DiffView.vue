@@ -522,38 +522,78 @@ function hunkSnapshot(h) {
     after: changed.map(r => r.rightText || '').filter(Boolean).slice(0, 6).join('\n')
   }
 }
+function fileTarget() {
+  const key = curFileKey.value
+  if (!key) return null
+  return {
+    fileKey: key, path: key, scope: 'file', hunkId: null, line: null,
+    targetKey: noteTargetKey('file'), oldLine: '', newLine: '', change: 'file',
+    hunkHeader: '', before: '', after: ''
+  }
+}
+function hunkTarget(h) {
+  const key = curFileKey.value
+  if (!key || !h) return null
+  const snap = hunkSnapshot(h)
+  return {
+    fileKey: key, path: key, scope: 'hunk', hunkId: h.id,
+    hunkHeader: hunkHeaderOf(h), user: (state.review && state.review.user) || '',
+    line: null, targetKey: noteTargetKey('hunk', { hunkId: h.id }),
+    oldLine: '', newLine: '', change: 'hunk', before: snap.before, after: snap.after
+  }
+}
 function targetForRow(ri, scope = 'line') {
   const key = curFileKey.value
   const s = normalizeNoteScope(scope)
   if (!key) return null
-  if (s === 'file') {
-    return {
-      fileKey: key, path: key, scope: 'file', hunkId: null, line: null,
-      targetKey: noteTargetKey('file'), oldLine: '', newLine: '', change: 'file',
-      hunkHeader: '', before: '', after: ''
-    }
-  }
+  if (s === 'file') return fileTarget()
   const r = rows.value[ri]
   const h = hunkAtRow(ri)
-  if (!r || !h) return targetForRow(ri, 'file')
-  const snap = hunkSnapshot(h)
-  const base = {
-    fileKey: key, path: key, hunkId: h.id, hunkHeader: hunkHeaderOf(h),
-    user: (state.review && state.review.user) || ''
-  }
-  if (s === 'hunk') {
-    return {
-      ...base, scope: 'hunk', line: null,
-      targetKey: noteTargetKey('hunk', { hunkId: h.id }),
-      oldLine: '', newLine: '',
-      change: 'hunk', before: snap.before, after: snap.after
-    }
-  }
+  if (!r || !h) return null
+  if (s === 'hunk') return hunkTarget(h)
   return {
-    ...base, scope: 'line', line: ri,
+    fileKey: key, path: key, hunkId: h.id, hunkHeader: hunkHeaderOf(h),
+    user: (state.review && state.review.user) || '', scope: 'line', line: ri,
     targetKey: noteTargetKey('line', { line: ri }),
     oldLine: r.left || '', newLine: r.right || '',
     change: r.type || '', before: r.leftText || '', after: r.rightText || ''
+  }
+}
+// H-12：编辑备注时按 note 自身字段重建 target；hunk 备注不能再按“当前行猜”而退化成 file。
+function targetFromNote(note) {
+  const key = curFileKey.value
+  if (!key || !note) return null
+  const scope = normalizeNoteScope(note.scope || 'file')
+  if (scope === 'file') {
+    return {
+      ...fileTarget(),
+      targetKey: note.targetKey || noteTargetKey('file'),
+      before: note.before || '', after: note.after || ''
+    }
+  }
+  if (scope === 'hunk') {
+    const h = hunkSpans.value.find(x => String(x.id) === String(note.hunkId)) || null
+    const snap = h ? hunkSnapshot(h) : { before: '', after: '' }
+    return {
+      fileKey: key, path: key, scope: 'hunk', hunkId: note.hunkId || null,
+      hunkHeader: note.hunkHeader || (h ? hunkHeaderOf(h) : ''),
+      line: null, targetKey: note.targetKey || noteTargetKey('hunk', { hunkId: note.hunkId }),
+      oldLine: '', newLine: '', change: 'hunk',
+      before: note.before || snap.before, after: note.after || snap.after
+    }
+  }
+  const ri = Number(note.line)
+  const r = Number.isFinite(ri) ? rows.value[ri] : null
+  return {
+    fileKey: key, path: key, hunkId: note.hunkId || null,
+    hunkHeader: note.hunkHeader || (r ? hunkHeaderOf(hunkAtRow(ri)) : ''),
+    scope: 'line', line: Number.isFinite(ri) ? ri : note.line,
+    targetKey: note.targetKey || noteTargetKey('line', { line: note.line }),
+    oldLine: r ? (r.left || '') : (note.oldLine || ''),
+    newLine: r ? (r.right || '') : (note.newLine || ''),
+    change: r ? (r.type || '') : (note.change || ''),
+    before: r ? (r.leftText || '') : (note.before || ''),
+    after: r ? (r.rightText || '') : (note.after || '')
   }
 }
 const activeReviewTarget = computed(() => targetForRow(activeReviewRow.value, effectiveReviewScope.value))
@@ -604,10 +644,9 @@ function openNoteForRow(ri, scope = 'line') {
 }
 function editExistingNote(note) {
   if (!note) return
-  const target = targetForRow(note.line == null ? -1 : note.line, note.scope)
-  openNoteEditor(target || {
-    ...note, fileKey: curFileKey.value, path: curFileKey.value
-  }, note)
+  const target = targetFromNote(note)
+  if (!target) return
+  openNoteEditor(target, note)
 }
 function closeNoteEditor() {
   noteEditor.value = { ...noteEditor.value, open: false }

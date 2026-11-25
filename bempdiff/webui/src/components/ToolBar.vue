@@ -29,7 +29,7 @@ const showExport = ref(false)
 const exportGranularity = ref('all')
 // 普通 jar / 无嵌套 lib 的包可能没有任何 lib/*.jar 变化；此时 JAR 粒度只会产出空 zip，直接禁用并给出原因。
 const jarChanged = computed(() => (state.job && state.job.stats ? Number(state.job.stats.jarChanged || 0) : 0))
-const jarExportDisabled = computed(() => !!state.job && jarChanged.value === 0)
+const jarExportDisabled = computed(() => !state.job || jarChanged.value === 0)
 // 拖拽高亮状态：'old' | 'new' | null
 const dragOver = ref(null)
 

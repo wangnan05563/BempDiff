@@ -4,6 +4,7 @@
 // 设计目标：不把预检失败伪装成比对失败——弹窗关闭即不产生 job。
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { state, confirmPreflight, cancelPreflight } from '../store'
+import { withToken } from '../lib/api_auth'
 import { t } from '../lib/i18n'
 
 const visible = computed(() => !!state.preflight)
@@ -31,7 +32,7 @@ function sideLine(s, labelKey) {
 }
 function openDiag() {
   // 诊断包接口会返回 zip 附件；window.open 在桌面壳/浏览器均能触发下载。
-  window.open('/api/admin/diag-bundle', '_blank', 'noopener')
+  window.open(withToken('/api/admin/diag-bundle'), '_blank', 'noopener')
 }
 
 onMounted(() => { nextTick(() => { if (dialogRef.value) dialogRef.value.focus() }) })

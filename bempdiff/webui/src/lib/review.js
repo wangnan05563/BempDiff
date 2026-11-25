@@ -49,7 +49,7 @@ export function reviewStatusMeta(status) {
  * 全部 Hunk 已审 → reviewed；部分 → in_progress；无 → unreviewed。
  */
 export function aggregateFileStatus({ hunkTotal = 0, hunks = {}, manualOverride = false, status = REVIEW_STATUS.UNREVIEWED } = {}) {
-  if (manualOverride) return normalizeReviewStatus(status, REVIEW_STATUS.REVIEWED)
+  if (manualOverride) return normalizeReviewStatus(status, REVIEW_STATUS.UNREVIEWED)
   let reviewed = 0
   let needsReview = false
   for (const v of Object.values(hunks || {})) {
@@ -147,14 +147,17 @@ export function summarizeReview(files = {}) {
     else if (st === REVIEW_STATUS.NEEDS_REVIEW) out.needsReviewFiles++
     else out.unreviewedFiles++
     if (f.manualOverride) out.manualFiles++
+    // M-15：文件级手动“已审”覆盖 Hunk 口径，避免“文件已审、Hunk 仍需复核”的自相矛盾汇总。
+    const manualReviewed = !!f.manualOverride && st === REVIEW_STATUS.REVIEWED
 
     let total = Math.max(0, Number(f.hunkTotal) || 0)
     let reviewed = 0
     for (const v of Object.values(f.hunks || {})) {
       const s = normalizeReviewStatus(v)
       if (s === REVIEW_STATUS.REVIEWED) reviewed++
-      else if (s === REVIEW_STATUS.NEEDS_REVIEW) out.needsReviewHunks++
+      else if (s === REVIEW_STATUS.NEEDS_REVIEW && !manualReviewed) out.needsReviewHunks++
     }
+    if (manualReviewed) reviewed = total
     if (reviewed > total) total = reviewed
     out.totalHunks += total
     out.reviewedHunks += reviewed

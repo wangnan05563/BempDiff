@@ -68,7 +68,7 @@ public final class MarkdownReport {
     private String aiUsageLine = "";
 
     /** 本次 AI 章节是否由真实 LLM 产出（false=离线 Mock 兜底）；仅用于审计摘要口径，不参与正文渲染。 */
-    private boolean aiRealLlm = true;
+    private boolean aiRealLlm = false;
 
     /** T01810 FR-006 展示层：AST 口径「格式或位置变更」条目数（0=不渲染统计行）。 */
     private int formattedOnlyCount = 0;

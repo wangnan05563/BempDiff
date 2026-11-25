@@ -349,6 +349,8 @@ public final class MainCliTest {
             Asserts.assertContains("应含 AI 智能分析章节", s, "AI 智能分析");
             Asserts.assertContains("AI 章节应含阶段A 概览", s, "阶段A");
             Asserts.assertContains("应落盘审计摘要章节", s, "审计摘要");
+            Asserts.assertContains("离线 Mock 的审计口径应为离线兜底", s, "离线兜底");
+            Asserts.assertNotContains("离线 Mock 不得声称已接入真实模型", s, "已接入真实模型");
             Path stageA = replay.resolve("stageA.prompt.txt");
             Asserts.assertTrue("离线回放应写出 stageA.prompt.txt: " + stageA, Files.isRegularFile(stageA));
             Asserts.assertContains("prompt 应含差异概览", read(stageA), "差异");

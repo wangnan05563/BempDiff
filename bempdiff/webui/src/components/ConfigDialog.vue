@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { state, saveConfig, testConnection, fetchModels, loadContextStatus, defaultConfig, toast, setDiffPalette } from '../store'
 import { api } from '../api/client'
+import { authHeaders, withToken } from '../lib/api_auth'
 import { pickPath, isElectron } from '../lib/desktop-bridge.js'
 import { t } from '../lib/i18n'
 import ThemeStudio from './ThemeStudio.vue'
@@ -382,7 +383,7 @@ async function onDiagExport(e) {
   diagBusy.value = true
   diagMsg.value = ''
   try {
-    const res = await fetch('/api/admin/diag-bundle')
+    const res = await fetch('/api/admin/diag-bundle', { headers: authHeaders() })
     if (!res.ok) {
       let msg = `${res.status} ${res.statusText}`
       try { const j = await res.json(); msg = j.error || msg } catch (_) { /* 非 JSON 错误体 */ }
@@ -852,7 +853,7 @@ function pickImportFile(ev) {
               <div class="d-flex align-items-center gap-2 flex-wrap">
                 <span class="fw-semibold text-nowrap"><i class="bi bi-clipboard-pulse"></i>{{ t('cfg.diag') }}</span>
                 <span class="text-secondary">{{ t('cfg.diag.desc') }}</span>
-                <a class="btn btn-outline-primary btn-sm ms-auto" href="/api/admin/diag-bundle" download
+                <a class="btn btn-outline-primary btn-sm ms-auto" :href="withToken('/api/admin/diag-bundle')" download
                    :aria-label="t('cfg.diag.hint')" :title="t('cfg.diag.hint')" :class="{ disabled: diagBusy }"
                    @click="onDiagExport">
                   <i class="bi bi-download"></i> {{ diagBusy ? t('cfg.diag.doing') : t('cfg.diag.run') }}

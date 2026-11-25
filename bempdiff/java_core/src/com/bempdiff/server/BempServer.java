@@ -75,6 +75,17 @@ public final class BempServer {
 
     // 重复字符串字面量常量：同一字符串在多处复用，集中定义避免重复。
     private static final String HDR_CONTENT_TYPE = "Content-Type";
+    /** 本机 API 的 CSRF 防护头：跨站表单无法附加自定义头，跨站 fetch 会触发预检；
+     *  服务端不返回 CORS 许可，因此恶意网页无法读取/提交变更请求。 */
+    private static final String HDR_REQUEST_GUARD = "X-BempDiff-Request";
+    private static final String REQUEST_GUARD_VALUE = "1";
+    /** 会话 token：本机 API 读取/变更都要求 token；Electron preload 注入，浏览器态由首页 Set-Cookie 下发。 */
+    private static final String HDR_TOKEN = "X-BempDiff-Token";
+    private static final String COOKIE_SESSION = "BEMPDIFF_SESSION";
+    private static final String ENV_API_TOKEN = "BEMPDIFF_API_TOKEN";
+    private static final String PROP_API_TOKEN = "bempdiff.apiToken";
+    /** 请求体统一上限，防止 chunked/无 Content-Length 的请求把服务端内存打满。 */
+    private static final int MAX_REQUEST_BODY_BYTES = 8 * 1024 * 1024;
     private static final String KEY_ERROR = "error";
     private static final String KEY_STATUS = "status";
     private static final String KEY_MESSAGE = "message";
@@ -127,8 +138,11 @@ public final class BempServer {
     // 洞察的静态部分（API 兼容/影响面/AST）只依赖比对结果；完成时预热，避免打开面板时重复反编译。
     private final Map<String, ApiCompat.Result> compatCache = new ConcurrentHashMap<>();
     private final Map<String, ImpactAnalyzer.Result> impactCache = new ConcurrentHashMap<>();
-    private final Map<String, Set<String>> insightKeysCache = new ConcurrentHashMap<>();
     private final ServerConfig config;
+    /** 本次进程会话 token；无显式传入时自动生成，API 不接受无 token 请求。 */
+    private final String apiToken;
+    /** 实际监听端口，用于收紧 loopback Origin 白名单（同机其他端口网页不应被信任）。 */
+    private volatile int boundPort = -1;
     private final AtomicLong seq = new AtomicLong(System.nanoTime() % 1_000_000);
     private final Path webroot;
     private final ReviewStore reviewStore = new ReviewStore(); // T06218 文件级审阅独立持久化（不随 JobStore 淘汰）
@@ -200,8 +214,20 @@ public final class BempServer {
     private final LruMap<String, StaticEntry> staticCache = new LruMap<>(STATIC_CACHE_MAX);
 
     public BempServer(ServerConfig config, Path webroot) {
+        this(config, webroot, null);
+    }
+
+    /** token 优先取显式参数，其次系统属性/环境变量；都没有则生成一次性随机 token。 */
+    public BempServer(ServerConfig config, Path webroot, String apiToken) {
         this.config = config;
         this.webroot = webroot;
+        this.apiToken = normalizeApiToken(apiToken);
+        // M-06：JobStore 淘汰作业时同步清掉本作业的派生缓存，否则长跑下缓存仍按 jobId 无界累积。
+        store.setOnEvict(job -> {
+            doneStatusCache.remove(job.id);
+            compatCache.remove(job.id);
+            impactCache.remove(job.id);
+        });
         purgeRuntimeStale(); // 启动即清残留（崩溃/强杀遗留），避免 .bempdiff/runtime 长期堆积
         // 退出自动全量清理：进程正常退出时把「解压/抽取临时文件 + 遗留运行时目录 + 过期日志」一次性回收。
         // 原因：多数系统临时件仅靠 deleteOnExit 兜底，进程被强杀/长驻不重启时进程内清理永不触发
@@ -211,24 +237,41 @@ public final class BempServer {
         }, "bempdiff-exit-cleanup"));
     }
 
+    /** 会话 token：显式参数 > -Dbempdiff.apiToken > BEMPDIFF_API_TOKEN > 自动生成。 */
+    private static String normalizeApiToken(String explicit) {
+        String token = explicit;
+        if (token == null || token.isBlank()) token = System.getProperty(PROP_API_TOKEN);
+        if (token == null || token.isBlank()) token = System.getenv(ENV_API_TOKEN);
+        if (token != null && !token.isBlank()) return token.trim();
+        byte[] random = new byte[32];
+        new java.security.SecureRandom().nextBytes(random);
+        return java.util.HexFormat.of().formatHex(random);
+    }
+
+    /** 供测试/桌面壳读取本次会话 token。 */
+    public String apiToken() {
+        return apiToken;
+    }
+
     public void start(int port) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
-        server.createContext("/api/session/compare", this::handleCompare);
-        server.createContext("/api/session/preflight", this::handlePreflight); // CX-09 比对前预检（只读、不建作业）
-        server.createContext("/api/tasks/running", this::handleRunningTasks); // 桌面壳关闭前查询进行中任务，防误关直接中断长比对
-        server.createContext("/api/job", this::handleJob);
-        server.createContext("/api/export", this::handleExportApi);
-        server.createContext("/api/entry", this::handleEntry);
-        server.createContext("/api/file", this::handleFile);
-        server.createContext("/api/config", this::handleConfig);
-        server.createContext("/api/sample", this::handleSample); // T06223 Launchpad 空态示例包（内置 sample_src）
-        server.createContext("/api/review", this::handleReview); // T06218 审阅文档读写（独立于 JobStore 生命周期）
-        server.createContext("/api/ai/test", this::handleAiTest);
-        server.createContext("/api/ai/models", this::handleAiModels);
-        server.createContext("/api/ai/context", this::handleAiContext);
-        server.createContext("/api/admin/cleanup", this::handleCleanupTemp); // 配置中心「手动清理」
-        server.createContext("/api/admin/diag-bundle", this::handleDiagBundle); // FR-011 一键导出脱敏诊断包
-        server.createContext("/api/update/check", this::handleUpdateCheck); // 「关于」页版本更新检查
+        this.boundPort = server.getAddress().getPort();
+        routeApi(server, "/api/session/compare", this::handleCompare);
+        routeApi(server, "/api/session/preflight", this::handlePreflight); // CX-09 比对前预检（只读、不建作业）
+        routeApi(server, "/api/tasks/running", this::handleRunningTasks); // 桌面壳关闭前查询进行中任务，防误关直接中断长比对
+        routeApi(server, "/api/job", this::handleJob);
+        routeApi(server, "/api/export", this::handleExportApi);
+        routeApi(server, "/api/entry", this::handleEntry);
+        routeApi(server, "/api/file", this::handleFile);
+        routeApi(server, "/api/config", this::handleConfig);
+        routeApi(server, "/api/sample", this::handleSample); // T06223 Launchpad 空态示例包（内置 sample_src）
+        routeApi(server, "/api/review", this::handleReview); // T06218 审阅文档读写（独立于 JobStore 生命周期）
+        routeApi(server, "/api/ai/test", this::handleAiTest);
+        routeApi(server, "/api/ai/models", this::handleAiModels);
+        routeApi(server, "/api/ai/context", this::handleAiContext);
+        routeApi(server, "/api/admin/cleanup", this::handleCleanupTemp); // 配置中心「手动清理」
+        routeApi(server, "/api/admin/diag-bundle", this::handleDiagBundle); // FR-011 一键导出脱敏诊断包
+        routeApi(server, "/api/update/check", this::handleUpdateCheck); // 「关于」页版本更新检查
         server.createContext("/", this::handleStatic);
         // 关键：默认 HttpServer 用单线程串行处理所有请求——一次长比对会阻塞全部 API/静态资源。
         // 改为每个请求一个虚拟线程，比对任务再下沉到 workers 执行器，UI 才能边比对边轮询进度。
@@ -246,9 +289,167 @@ public final class BempServer {
 
     // ---------------- 工具 ----------------
 
+    /** 注册 API 路由并统一做本机会话防护：
+     *  - OPTIONS 放行但不返回 CORS 许可（浏览器跨站预检失败）；
+     *  - 其他请求拒绝非 loopback Origin / Sec-Fetch-Site: cross-site；
+     *  - 所有 API 必须带本次会话 token（Electron preload 注入 header，浏览器由首页 Cookie 下发）；
+     *  - POST/PUT/DELETE 额外要求固定请求头，防跨站表单。
+     */
+    private void routeApi(HttpServer server, String path, com.sun.net.httpserver.HttpHandler handler) {
+        server.createContext(path, ex -> {
+            String method = ex.getRequestMethod();
+            if (M_OPTIONS.equalsIgnoreCase(method)) {
+                handler.handle(ex);
+                return;
+            }
+            if (!originAllowed(ex)) {
+                drainRejectedBody(ex);
+                sendError(ex, 403, "拒绝跨站请求：Origin/Sec-Fetch-Site 非本机");
+                return;
+            }
+            if (!hasValidToken(ex)) {
+                drainRejectedBody(ex);
+                sendError(ex, 401, "拒绝访问：缺少或无效的会话 token");
+                return;
+            }
+            boolean simple = "GET".equalsIgnoreCase(method) || "HEAD".equalsIgnoreCase(method);
+            if (!simple && !REQUEST_GUARD_VALUE.equals(ex.getRequestHeaders().getFirst(HDR_REQUEST_GUARD))) {
+                drainRejectedBody(ex);
+                sendError(ex, 403, "拒绝跨站请求：缺少本地请求头");
+                return;
+            }
+            handler.handle(ex);
+        });
+    }
+
+    /** 浏览器跨站请求带 Origin；只允许本进程端口或明确的 Vite 开发端口，同机其他端口不信任。 */
+    private boolean originAllowed(HttpExchange ex) {
+        String site = ex.getRequestHeaders().getFirst("Sec-Fetch-Site");
+        if (site != null && "cross-site".equalsIgnoreCase(site.trim())) return false;
+        String origin = ex.getRequestHeaders().getFirst("Origin");
+        if (origin == null || origin.isBlank()) return true;
+        try {
+            URI u = URI.create(origin.trim());
+            String scheme = u.getScheme();
+            String host = u.getHost();
+            if (!("http".equalsIgnoreCase(scheme) || "https".equalsIgnoreCase(scheme))
+                    || !("127.0.0.1".equals(host) || "localhost".equalsIgnoreCase(host)
+                    || "::1".equals(host) || "[::1]".equals(host))) {
+                return false;
+            }
+            int originPort = u.getPort();
+            if (originPort == boundPort) return true;
+            int devPort = configuredDevPort();
+            return originPort == devPort || originPort == 5173;
+        } catch (IllegalArgumentException e) {
+            return false; // Origin: null / 畸形值一律拒绝
+        }
+    }
+
+    private static int configuredDevPort() {
+        String raw = System.getenv("BEMPDIFF_DEV_PORT");
+        if (raw != null) {
+            try {
+                int p = Integer.parseInt(raw.trim());
+                if (p > 0 && p <= 65535) return p;
+            } catch (NumberFormatException ignored) { /* 非法环境变量按默认 */ }
+        }
+        return 5180;
+    }
+
+    /** token 支持 header（Electron preload）、Cookie（浏览器）或 GET 直链查询参数（下载兜底）。 */
+    private boolean hasValidToken(HttpExchange ex) {
+        if (constantTimeEquals(apiToken, ex.getRequestHeaders().getFirst(HDR_TOKEN))) return true;
+        List<String> cookies = ex.getRequestHeaders().get("Cookie");
+        if (cookies != null) {
+            for (String header : cookies) {
+                if (header == null) continue;
+                for (String part : header.split(";")) {
+                    int eq = part.indexOf('=');
+                    if (eq <= 0) continue;
+                    String name = part.substring(0, eq).trim();
+                    String value = part.substring(eq + 1).trim();
+                    if (COOKIE_SESSION.equals(name) && constantTimeEquals(apiToken, value)) return true;
+                }
+            }
+        }
+        if ("GET".equalsIgnoreCase(ex.getRequestMethod())) {
+            String query = ex.getRequestURI().getRawQuery();
+            if (query != null) {
+                for (String part : query.split("&")) {
+                    int eq = part.indexOf('=');
+                    if (eq <= 0 || !"token".equals(part.substring(0, eq))) continue;
+                    String value = java.net.URLDecoder.decode(part.substring(eq + 1), StandardCharsets.UTF_8);
+                    if (constantTimeEquals(apiToken, value)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static boolean constantTimeEquals(String expected, String actual) {
+        if (expected == null || actual == null) return false;
+        return java.security.MessageDigest.isEqual(
+                expected.getBytes(StandardCharsets.UTF_8),
+                actual.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void addSessionCookie(HttpExchange ex, String token) {
+        ex.getResponseHeaders().add("Set-Cookie",
+                COOKIE_SESSION + "=" + token + "; Path=/; HttpOnly; SameSite=Strict");
+    }
+
+    /** 拒绝变更请求时把小的已声明请求体读掉，避免 HttpServer 因 fixed content-length 未消费而断连；
+     *  大请求体不读，直接拒绝并让连接关闭，避免为攻击者做无上限缓冲。 */
+    private static void drainRejectedBody(HttpExchange ex) {
+        long declared = parseContentLength(ex);
+        if (declared <= 0 || declared > 64 * 1024) return;
+        try (InputStream in = ex.getRequestBody()) {
+            in.readNBytes((int) declared);
+        } catch (IOException ignored) {
+            // 客户端提前断开；响应仍尽力返回 403。
+        }
+    }
+
     private static String readBody(HttpExchange ex) throws IOException {
-        byte[] b = readAll(ex.getRequestBody());
+        return readBody(ex, MAX_REQUEST_BODY_BYTES);
+    }
+
+    /** 带长度上限的请求体读取：先看 Content-Length，再对 chunked 流边读边计数，超限立即中止。 */
+    private static String readBody(HttpExchange ex, int maxBytes) throws IOException {
+        long declared = parseContentLength(ex);
+        if (declared > maxBytes) throw new RequestTooLargeException();
+        byte[] b = readLimited(ex.getRequestBody(), maxBytes);
         return new String(b, StandardCharsets.UTF_8);
+    }
+
+    private static long parseContentLength(HttpExchange ex) {
+        String raw = ex.getRequestHeaders().getFirst("Content-Length");
+        if (raw == null || raw.isBlank()) return -1L;
+        try {
+            long v = Long.parseLong(raw.trim());
+            return v < 0 ? -1L : v;
+        } catch (NumberFormatException e) {
+            return -1L;
+        }
+    }
+
+    private static byte[] readLimited(InputStream in, int maxBytes) throws IOException {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        long total = 0;
+        int r;
+        while ((r = in.read(buf)) != -1) {
+            total += r;
+            if (total > maxBytes) throw new RequestTooLargeException();
+            bos.write(buf, 0, r);
+        }
+        return bos.toByteArray();
+    }
+
+    /** 请求体超过上限；各入口按需转成 413，未单独捕获的入口也会因 IOException 被拒，不会再读满内存。 */
+    private static final class RequestTooLargeException extends IOException {
+        RequestTooLargeException() { super("请求体超过上限"); }
     }
 
     private static byte[] readAll(InputStream in) throws IOException {
@@ -259,14 +460,13 @@ public final class BempServer {
         return bos.toByteArray();
     }
 
-    private static void addCors(HttpExchange ex) {
-        ex.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-        ex.getResponseHeaders().add("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-        ex.getResponseHeaders().add("Access-Control-Allow-Headers", HDR_CONTENT_TYPE);
+    /** 同源托管 SPA，不向任意网页开放 CORS；跨站请求读不到响应、也发不出带自定义头的变更请求。 */
+    private static void noCors() {
+        // Intentionally no Access-Control-Allow-Origin. 保留方法以集中说明安全边界。
     }
 
     private static void sendJson(HttpExchange ex, int code, Object obj) throws IOException {
-        addCors(ex);
+        noCors();
         byte[] b = Json.write(obj).getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().add(HDR_CONTENT_TYPE, "application/json; charset=utf-8");
         ex.sendResponseHeaders(code, b.length);
@@ -276,7 +476,7 @@ public final class BempServer {
     }
 
     private static void sendText(HttpExchange ex, int code, String mime, String text) throws IOException {
-        addCors(ex);
+        noCors();
         byte[] b = text.getBytes(StandardCharsets.UTF_8);
         ex.getResponseHeaders().add(HDR_CONTENT_TYPE, mime + "; charset=utf-8");
         ex.sendResponseHeaders(code, b.length);
@@ -291,7 +491,7 @@ public final class BempServer {
         // 避免「已声明 Content-Length、打开时文件却不存在」导致客户端等满 60s。
         try (FileChannel ch = FileChannel.open(file, StandardOpenOption.READ)) {
             long size = ch.size();
-            addCors(ex);
+            noCors();
             ex.getResponseHeaders().add(HDR_CONTENT_TYPE, mime);
             ex.getResponseHeaders().add("Content-Disposition", "attachment");
             ex.sendResponseHeaders(code, size);
@@ -309,7 +509,7 @@ public final class BempServer {
 
     // 静态文件内联返回（不挂 Content-Disposition: attachment，否则浏览器会下载而非渲染）。
     private static void sendBytesInline(HttpExchange ex, int code, String mime, byte[] data) throws IOException {
-        addCors(ex);
+        noCors();
         ex.getResponseHeaders().add(HDR_CONTENT_TYPE, mime);
         ex.sendResponseHeaders(code, data.length);
         try (OutputStream os = ex.getResponseBody()) {
@@ -350,7 +550,7 @@ public final class BempServer {
     private void handleReview(HttpExchange ex) throws IOException {
         String method = ex.getRequestMethod();
         if ("OPTIONS".equalsIgnoreCase(method)) {
-            addCors(ex);
+            noCors();
             ex.sendResponseHeaders(204, -1);
             ex.close();
             return;
@@ -362,8 +562,8 @@ public final class BempServer {
             return;
         }
         String jobId = path.substring(prefix.length());
-        if (jobId.contains("/") || jobId.isEmpty()) {
-            sendError(ex, 400, "缺少合法 jobId");
+        if (!ReviewStore.isValidJobId(jobId)) {
+            sendError(ex, 400, "缺少合法 jobId（仅允许字母、数字、下划线与短横线）");
             return;
         }
         try {
@@ -376,12 +576,12 @@ public final class BempServer {
                 return;
             }
             if ("PUT".equalsIgnoreCase(method)) {
-                byte[] raw = readAll(ex.getRequestBody());
-                if (raw.length > ReviewStore.MAX_BODY_BYTES) {
-                    sendError(ex, 413, "审阅文档超过 8MB 上限");
-                    return;
+                // M-14：null/数组/标量/带尾随字符的 JSON 不能被 Json.parseObject 静默当成空文档，
+                // 否则一个错误请求即可清空已有审阅；这里要求根节点是对象且显式带 files。
+                Map<String, Object> body = Json.parseObjectStrict(readBody(ex, (int) ReviewStore.MAX_BODY_BYTES));
+                if (!body.containsKey("files")) {
+                    throw new IllegalArgumentException("审阅文档缺少 files 字段");
                 }
-                Map<String, Object> body = Json.parseObject(new String(raw, StandardCharsets.UTF_8));
                 body.put("jobId", jobId); // 路径是唯一权威，忽略 body 里伪造 jobId
                 Map<String, Object> saved = reviewStore.save(jobId, body);
                 Map<String, Object> resp = ReviewStatusCalculator.withSummary(saved);
@@ -399,6 +599,11 @@ public final class BempServer {
                 return;
             }
             sendError(ex, 405, "仅支持 GET/PUT/DELETE");
+        } catch (RequestTooLargeException e) {
+            sendError(ex, 413, "审阅文档超过 8MB 上限");
+        } catch (ReviewStore.UnreadableException e) {
+            LOG.log(java.util.logging.Level.WARNING, "[Review] 文件不可读 jobId=" + jobId, e);
+            sendError(ex, 503, "审阅文件不可读（权限或磁盘错误），请检查 " + reviewStore.directory());
         } catch (IllegalArgumentException e) {
             sendError(ex, 400, e.getMessage() == null ? "非法审阅请求" : e.getMessage());
         } catch (Exception e) {
@@ -453,6 +658,8 @@ public final class BempServer {
             String mode = MODE_FOLDER.equals(leftType) ? MODE_FOLDER : "package";
             Map<String, Object> result = PreflightService.check(leftPath, rightPath, mode, opts.getIgnoreExtensions());
             sendJson(ex, 200, result);
+        } catch (RequestTooLargeException e) {
+            sendError(ex, 413, "请求体超过 8MB 上限");
         } catch (Exception e) {
             LOG.log(Level.WARNING, "比对预检失败", e);
             // 预检本身失败不阻断比对：返回 block=空、warn 说明，前端会提示后允许继续
@@ -525,6 +732,8 @@ public final class BempServer {
             resp.put("oldVersion", oldVersion);
             resp.put("newVersion", newVersion);
             sendJson(ex, 200, resp);
+        } catch (RequestTooLargeException e) {
+            sendError(ex, 413, "请求体超过 8MB 上限");
         } catch (Exception e) {
             LOG.log(Level.WARNING, "比对提交失败", e);
             sendError(ex, 500, "比对提交失败: " + e.getMessage());
@@ -584,6 +793,7 @@ public final class BempServer {
             return;
         }
         try {
+            AstNormalizer.beginJobScope(); // M-06：作业级 AST 降级计数，避免报告读取进程级累计值
             // 等待并发许可期间可能已被取消（仍 QUEUED），拿到许可后立即再判一次，避免空跑一整轮解析。
             if (job.isCancelRequested()) { job.markCancelled(); return; }
             // 开始新比对：回收此前其它作业的解包运行时目录（磁盘只保留当前作业的解包产物，防垃圾累积）。
@@ -635,6 +845,7 @@ public final class BempServer {
             job.markRunning("diffing", "计算差异…", 50);
             DiffEngine engine = new DiffEngine();
             DiffResult r = engine.compute(oldSnap, newSnap);
+            job.setAstFallbackFiles(AstNormalizer.endJobScope()); // 本作业 AST 统计到 compute 结束为止
             job.markRunning("diffing", "计算差异…", 70);
             // 全量叶子统计：解包后快照已含所有嵌套归档内部差异，故直接 engine.stats(r)，
             // 使「差异数字」等于最终逐层解包后的差异数量，与自动解包展开后的差异树一致。
@@ -654,6 +865,8 @@ public final class BempServer {
             LOG.log(Level.WARNING, e, () -> "比对失败: " + job.id);
             job.fail(describeCompareFailure(e));
         } finally {
+            int astFallback = AstNormalizer.endJobScope(); // 异常退出也清理线程局部，防复用时串作业
+            if (astFallback > 0) job.setAstFallbackFiles(astFallback);
             compareSem.release();
         }
     }
@@ -814,7 +1027,9 @@ public final class BempServer {
         // 用 switch 替代串行 if 链分派其余动作，降低认知复杂度；各 case 内部仅做调用/返回，不含嵌套分支。
         switch (action) {
             case "cancel" -> {
-                job.requestCancel(); // 置取消标记；后台任务在阶段边界检查并标记 CANCELLED
+                // M-11：QUEUED 作业不必等 worker 拿到 compareSem 才置终态；先置 flag，再立即标 CANCELLED。
+                job.requestCancel();
+                job.markCancelled();
                 Map<String, Object> resp = new LinkedHashMap<>();
                 resp.put(KEY_JOB_ID, job.id);
                 resp.put(KEY_STATUS, job.getStatus());
@@ -872,9 +1087,7 @@ public final class BempServer {
         try {
             workers.submit(() -> {
                 try {
-                    Set<String> keys = new HashSet<>();
-                    for (List<String> list : job.getResult().getByStatus().values()) keys.addAll(list);
-                    loadInsightStatics(job, keys);
+                    loadInsightStatics(job);
                 } catch (Exception e) {
                     LOG.log(Level.FINE, "洞察预热失败 jobId=" + job.id, e);
                 }
@@ -885,7 +1098,7 @@ public final class BempServer {
     }
 
     /** 计算并缓存洞察的静态结果；缓存命中直接返回。 */
-    private synchronized ApiCompat.Result loadInsightStatics(Job job, Set<String> allKeys) {
+    private synchronized ApiCompat.Result loadInsightStatics(Job job) {
         ApiCompat.Result cached = compatCache.get(job.id);
         if (cached != null) return cached;
         AiWorkCache work = getAiWork(job);
@@ -897,7 +1110,6 @@ public final class BempServer {
         ImpactAnalyzer.Result impact = ImpactAnalyzer.analyze(work.decompiled, compat, deletedKeys);
         compatCache.put(job.id, compat);
         impactCache.put(job.id, impact);
-        insightKeysCache.put(job.id, allKeys);
         return compat;
     }
 
@@ -917,7 +1129,7 @@ public final class BempServer {
             ApiCompat.Result compat = compatCache.get(job.id);
             ImpactAnalyzer.Result impact = impactCache.get(job.id);
             if (compat == null || impact == null) {
-                compat = loadInsightStatics(job, allKeys);
+                compat = loadInsightStatics(job);
                 impact = impactCache.get(job.id);
             }
 
@@ -973,7 +1185,7 @@ public final class BempServer {
                 if (u != null && u.isOk() && u.getOldSource() != null && u.getNewSource() != null) normalized++;
             }
             ast.put("normalizedFiles", normalized);
-            ast.put("fallbackFiles", AstNormalizer.degradedCount());
+            ast.put("fallbackFiles", job.getAstFallbackFiles());
             ast.put("ignoredChanges", job.getResult().formattedOnlyCount());
             resp.put("astSummary", ast);
             sendJson(ex, 200, resp);
@@ -1167,7 +1379,7 @@ public final class BempServer {
             MarkdownReport rep = new MarkdownReport(job.opts.getTopK());
             // T01810 FR-006 展示层：AST 折叠/降级计数进报告统计段（AI 分支由 runAiAnalysis 内同口径接线）
             rep.setFormattedOnlyCount(job.getResult().formattedOnlyCount());
-            rep.setAstDegradedCount(AstNormalizer.degradedCount());
+            rep.setAstDegradedCount(job.getAstFallbackFiles());
             String md = buildMarkdown(job, ai, projDir, category, prompt,
                     work.decompiled, work.text, work.libJar, rep);
             sendText(ex, 200, "text/markdown", md);
@@ -1252,7 +1464,7 @@ public final class BempServer {
         rep.setAiFocus(categoryLabel(category, prompt));
         // T01810 FR-006 展示层：AST 折叠/降级计数——AI 与非 AI 两条报告路径同口径
         rep.setFormattedOnlyCount(job.getResult().formattedOnlyCount());
-        rep.setAstDegradedCount(AstNormalizer.degradedCount());
+        rep.setAstDegradedCount(job.getAstFallbackFiles());
         // 聚焦精简报告：仅当用户显式选择具体专项（权威类别为破坏性/影响/测试要点/自定义）时启用——
         // 以 AI 章节为核心，其余章节压缩为背景（差异规模、变更文件清单），标题随分析主题（如「测试要点分析报告」）；
         // 整体风险分析（risk）与默认整体分析（normCat=null）仍走完整差异报告，
@@ -1831,7 +2043,6 @@ public final class BempServer {
             ex.getResponseHeaders().set(HDR_CONTENT_TYPE, "text/event-stream; charset=utf-8");
             ex.getResponseHeaders().set("Cache-Control", "no-cache");
             ex.getResponseHeaders().set("Connection", "keep-alive");
-            ex.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
             ex.getResponseHeaders().set("X-Accel-Buffering", "no");
             ex.sendResponseHeaders(200, 0);
             OutputStream os = ex.getResponseBody();
@@ -2318,11 +2529,11 @@ public final class BempServer {
             sendError(ex, 405, "仅支持 GET");
             return;
         }
-        Path base = Paths.get("bempdiff", "sample_src").toAbsolutePath().normalize();
-        Path left = base.resolve("v1");
-        Path right = base.resolve("v2");
-        if (!Files.isDirectory(left) || !Files.isDirectory(right)) {
-            sendError(ex, 404, "内置示例包不存在：" + base);
+        Path base = findSampleDir();
+        Path left = base == null ? null : base.resolve("v1");
+        Path right = base == null ? null : base.resolve("v2");
+        if (base == null || !Files.isDirectory(left) || !Files.isDirectory(right)) {
+            sendError(ex, 404, "内置示例包不存在，请检查安装资源");
             return;
         }
         Map<String, Object> resp = new LinkedHashMap<>();
@@ -2332,6 +2543,33 @@ public final class BempServer {
         resp.put("rightPath", right.toString());
         resp.put("description", "内置小样本：v1 → v2 的 Java 服务变更，一键比对并生成报告");
         sendJson(ex, 200, resp);
+    }
+
+    /**
+     * M-09：内置示例目录解析。打包后 cwd 不是仓库根，不能只拼 {@code bempdiff/sample_src}。
+     * 依次尝试显式系统属性、cwd、以及从本类代码位置向上回溯（jar 在 bempdiff/dist_input/app 下）。
+     */
+    static Path findSampleDir() {
+        String explicit = System.getProperty("bempdiff.sampleDir", "").trim();
+        if (!explicit.isEmpty()) {
+            Path p = Paths.get(explicit).toAbsolutePath().normalize();
+            if (Files.isDirectory(p.resolve("v1")) && Files.isDirectory(p.resolve("v2"))) return p;
+        }
+        Path cwd = Paths.get("bempdiff", "sample_src").toAbsolutePath().normalize();
+        if (Files.isDirectory(cwd.resolve("v1")) && Files.isDirectory(cwd.resolve("v2"))) return cwd;
+        try {
+            URI loc = BempServer.class.getProtectionDomain().getCodeSource().getLocation().toURI();
+            Path p = Paths.get(loc).toAbsolutePath().normalize();
+            if (Files.isRegularFile(p)) p = p.getParent();
+            for (int depth = 0; depth < 5 && p != null; depth++) {
+                Path candidate = p.resolve("sample_src");
+                if (Files.isDirectory(candidate.resolve("v1")) && Files.isDirectory(candidate.resolve("v2"))) return candidate;
+                p = p.getParent();
+            }
+        } catch (Exception ignored) {
+            // 受限运行环境可能拿不到 CodeSource；cwd/属性都不命中时按缺失处理。
+        }
+        return null;
     }
 
     private void handleConfig(HttpExchange ex) throws IOException {
@@ -2776,6 +3014,8 @@ public final class BempServer {
         }
         String path = ex.getRequestURI().getPath();
         if (path.equals("/") || path.isEmpty()) path = DEFAULT_INDEX;
+        // 浏览器从首页拿到 HttpOnly + SameSite=Strict 会话 Cookie，后续 API 与 <a download> 自动携带。
+        if (DEFAULT_INDEX.equals(path)) addSessionCookie(ex, apiToken);
         Path file = (webroot != null) ? webroot.resolve(path.substring(1)) : null;
         if (file != null && Files.isRegularFile(file)) {
             serveStaticBytes(ex, path, file);

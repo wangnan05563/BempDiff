@@ -18,8 +18,6 @@ public final class ParseConfig {
     private boolean expandInternalLib = true;
     /** L2：是否展开第三方 lib（默认 false，仅 jar 级） */
     private boolean expandThirdPartyLib = false;
-    /** 普通 jar 比对时，是否把所有 class 当 L1 展开（同构件两版场景，--expand-all） */
-    private boolean expandAllForPlainJar = false;
     /** 单条目大小上限，超过则跳过内容读取（防 OOM）。默认值与 DEFAULT_ENTRY_CAP_BYTES 对齐。 */
     private long maxEntryBytes = DEFAULT_ENTRY_CAP_BYTES;
 
@@ -45,14 +43,6 @@ public final class ParseConfig {
 
     public void setExpandThirdPartyLib(boolean v) {
         this.expandThirdPartyLib = v;
-    }
-
-    public boolean isExpandAllForPlainJar() {
-        return expandAllForPlainJar;
-    }
-
-    public void setExpandAllForPlainJar(boolean v) {
-        this.expandAllForPlainJar = v;
     }
 
     public long getMaxEntryBytes() {

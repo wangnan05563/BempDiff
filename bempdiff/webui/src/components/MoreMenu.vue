@@ -25,7 +25,7 @@ const aiBusy = computed(() => aiAnyRunning())
 const running = computed(() => isRunning())
 const unpacking = computed(() => isUnpacking())
 const jarChanged = computed(() => (state.job && state.job.stats ? Number(state.job.stats.jarChanged || 0) : 0))
-const jarDisabled = computed(() => !!state.job && jarChanged.value === 0)
+const jarDisabled = computed(() => !state.job || jarChanged.value === 0)
 const runningExports = computed(() => state.exportRecords.filter(r => r.status === 'running').length)
 const accentName = (a) => (a && a.nameKey ? t(a.nameKey) : (a ? a.name : ''))
 
@@ -42,8 +42,8 @@ function close() { show.value = false }
 function after(fn) { close(); fn && fn() }
 async function genReport() {
   close()
-  await generateReport(false)
-  if (state.reportMd) props.onOpenReport()
+  const ok = await generateReport(false)
+  if (ok && state.reportMd) props.onOpenReport()
 }
 function doExport(granularity) {
   if (granularity === 'jar' && jarDisabled.value) { toast('warning', t('tb.gJarEmpty')); return false }

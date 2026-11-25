@@ -101,11 +101,38 @@ public final class Json {
         return (o instanceof Map) ? (Map<String, Object>) o : new LinkedHashMap<>();
     }
 
+    /**
+     * 严格对象解析：根节点必须是 JSON 对象，且解析后不能有尾随字符。
+     * 用于审阅 PUT 等“非对象 body 不能被当成空文档”的入口；普通兼容入口仍走 parseObject。
+     */
+    @SuppressWarnings("unchecked")
+    public static Map<String, Object> parseObjectStrict(String s) {
+        Object o;
+        try {
+            o = parseStrict(s);
+        } catch (JsonParseException e) {
+            // 审阅等 HTTP 入口把格式错误归为客户端 400，而不是外层兜底 500。
+            throw new IllegalArgumentException(e.getMessage(), e);
+        }
+        if (!(o instanceof Map)) throw new IllegalArgumentException("JSON 根节点必须是对象");
+        return (Map<String, Object>) o;
+    }
+
     public static Object parse(String s) {
         Parser p = new Parser(s);
         p.skipWs();
         Object v = p.parseValue();
         p.skipWs();
+        return v;
+    }
+
+    public static Object parseStrict(String s) {
+        Parser p = new Parser(s);
+        p.skipWs();
+        if (p.i >= p.s.length()) throw new JsonParseException("JSON 为空");
+        Object v = p.parseValue();
+        p.skipWs();
+        if (p.i < p.s.length()) throw new JsonParseException("JSON 尾部存在多余字符");
         return v;
     }
 
